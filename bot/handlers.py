@@ -304,6 +304,30 @@ def register_handlers(bot, calls, state):
         except Exception as e:
             await query.message.reply_text("Ban All stopped/failed. Check Alexa's ban-users permission and group access.\\n" + str(e)[:220])
 
+    @bot.on_message(filters.command("banuser") & owner)
+    async def owner_ban_user(_, m):
+        args = m.command[1:]
+        if len(args) != 2:
+            return await reply(m, "Usage: /banuser GROUP_ID USER_ID")
+        try:
+            group_id, user_id = int(args[0]), int(args[1])
+            await bot.ban_chat_member(group_id, user_id)
+            await reply(m, f"User {user_id} banned from group {group_id}.")
+        except Exception as e:
+            await reply(m, "Ban failed. Check IDs and Alexa's ban-users permission. " + str(e)[:180])
+
+    @bot.on_message(filters.command("unbanuser") & owner)
+    async def owner_unban_user(_, m):
+        args = m.command[1:]
+        if len(args) != 2:
+            return await reply(m, "Usage: /unbanuser GROUP_ID USER_ID")
+        try:
+            group_id, user_id = int(args[0]), int(args[1])
+            await bot.unban_chat_member(group_id, user_id, only_if_banned=True)
+            await reply(m, f"Ban removed for user {user_id} in group {group_id}. This does not automatically add them back.")
+        except Exception as e:
+            await reply(m, "Unban failed. Check IDs and Alexa's group access. " + str(e)[:180])
+
     # Owner dashboard; callbacks are restricted to the configured owner.
     def owner_keyboard():
         return InlineKeyboardMarkup([
@@ -330,9 +354,26 @@ def register_handlers(bot, calls, state):
             preview = "\\n".join(str(x) for x in ids[-30:]) if ids else "No users recorded yet."
             text = f"👥 **USERS ({len(ids)})**\\nLatest recorded IDs:\\n{preview}"
         elif action == "groups":
-            ids = state["groups"]
-            preview = "\\n".join(str(x) for x in ids[-30:]) if ids else "No groups recorded yet."
-            text = f"💬 **GROUPS ({len(ids)})**\\nLatest recorded group IDs:\\n{preview}"
+            import sqlite3
+            try:
+                with sqlite3.connect(DB_PATH) as db:
+                    stored = db.execute("SELECT group_id, title FROM known_groups ORDER BY seen_at DESC LIMIT 20").fetchall()
+                lines = ["💬 **GROUPS**"]
+                for gid, title in stored:
+                    try:
+                        chat = await bot.get_chat(gid)
+                        link = chat.invite_link
+                        if not link:
+                            try:
+                                link = (await bot.create_chat_invite_link(gid, name="Alexa Owner Panel")).invite_link
+                            except Exception:
+                                link = "Invite link unavailable; check Alexa's admin permissions."
+                        lines.append(f"{title} | ID: {gid}\\n{link}")
+                    except Exception:
+                        lines.append(f"{title} | ID: {gid} | inaccessible")
+                text = "\\n\\n".join(lines) if stored else "No groups recorded yet."
+            except Exception as e:
+                text = "Could not load groups: " + str(e)[:160]
         elif action == "broadcast":
             text = "📢 **BROADCAST**\\nSend /broadcast your message in this chat to broadcast to recorded users and groups."
         else:
