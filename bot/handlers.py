@@ -54,6 +54,7 @@ def register_handlers(bot, calls, state):
             db.execute("CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, user_id INTEGER, username TEXT, display_name TEXT, message_text TEXT, sent_at INTEGER)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id, sent_at)")
             db.execute("CREATE TABLE IF NOT EXISTS known_groups (group_id INTEGER PRIMARY KEY, title TEXT, seen_at INTEGER)")
+            db.execute("CREATE TABLE IF NOT EXISTS logging_settings (group_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, changed_by INTEGER, changed_at INTEGER)")
     init_db()
 
     @bot.on_message(filters.group & ~filters.service, group=5)
@@ -71,7 +72,8 @@ def register_handlers(bot, calls, state):
                            (group_id, user.id, user.username or "", display_name, now))
                 db.execute("INSERT INTO known_groups VALUES (?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET title=excluded.title, seen_at=excluded.seen_at",
                            (group_id, m.chat.title or str(group_id), now))
-                if message_text:
+                setting = db.execute("SELECT enabled FROM logging_settings WHERE group_id=?", (group_id,)).fetchone()
+                if message_text and setting and setting[0] == 1:
                     db.execute("INSERT INTO group_messages(group_id,user_id,username,display_name,message_text,sent_at) VALUES(?,?,?,?,?,?)",
                                (group_id, user.id, user.username or "", display_name, message_text, now))
             if group_id not in state["groups"]:
@@ -80,6 +82,31 @@ def register_handlers(bot, calls, state):
                 state["users"].append(user.id)
         except Exception:
             logging.exception("Failed to record group activity")
+
+    async def change_group_logging(m, enabled):
+        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+            return await reply(m, "Use this command in the group.")
+        try:
+            member = await bot.get_chat_member(m.chat.id, m.from_user.id)
+            if member.status not in ("administrator", "owner"):
+                return await reply(m, "Only a group admin can change message logging.")
+            with sqlite3.connect(DB_PATH) as db:
+                db.execute("INSERT INTO logging_settings(group_id,enabled,changed_by,changed_at) VALUES(?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET enabled=excluded.enabled, changed_by=excluded.changed_by, changed_at=excluded.changed_at",
+                           (m.chat.id, int(enabled), m.from_user.id, int(time.time())))
+            if enabled:
+                await reply(m, "📝 Message search logging is ON. Alexa stores messages it receives from now on so the bot owner can search them. Member IDs are recorded for group management. Use /disablelogs to turn message storage off.")
+            else:
+                await reply(m, "🛑 Message search logging is OFF. New messages won't be stored for search; saved records remain in the database.")
+        except Exception as e:
+            await reply(m, "Could not change logging setting: " + str(e)[:160])
+
+    @bot.on_message(filters.command("enablelogs") & filters.group)
+    async def enable_group_logs(_, m):
+        await change_group_logging(m, True)
+
+    @bot.on_message(filters.command("disablelogs") & filters.group)
+    async def disable_group_logs(_, m):
+        await change_group_logging(m, False)
 
     @bot.on_message(filters.command("chatsearch") & owner)
     async def owner_chat_search(_, m):
