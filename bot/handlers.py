@@ -129,16 +129,74 @@ def register_handlers(bot, calls, state):
         except Exception as e:
             await reply(m, "Search failed: " + str(e)[:180])
 
+    def start_keyboard(username):
+        updates_url = os.getenv("UPDATES_URL", "https://t.me/+X5aelUHksVRlODQ8").strip()
+        discuss_url = os.getenv("DISCUSSION_URL", "https://t.me/+dGq9_BqdD5hjYzk0").strip()
+        rows = [[InlineKeyboardButton("♛ 𝑨𝑫𝑫 𝑨𝑳𝑬𝑿𝑨 𝑰𝑵 𝒀𝑶𝑼𝑹 𝑮𝑹𝑶𝑼𝑷 ♛", url=f"https://t.me/{username}?startgroup=true")]]
+        community = []
+        if updates_url:
+            community.append(InlineKeyboardButton("♛ 𝑼𝑷𝑫𝑨𝑻𝑬𝑺", url=updates_url))
+        if discuss_url:
+            community.append(InlineKeyboardButton("♛ 𝑫𝑰𝑺𝑪𝑼𝑺𝑺𝑰𝑶𝑵", url=discuss_url))
+        if community:
+            rows.append(community)
+        return InlineKeyboardMarkup(rows)
+
+    async def role_help(m):
+        if not m.from_user:
+            return "🎵 Use /help in a group to see available commands."
+        if m.from_user.id == state["owner_id"]:
+            return ("🛡️ **BOT OWNER — GLOBAL ACCESS**\\n"
+                    "/owner — Owner Panel\\n/stats — Statistics\\n/broadcast MESSAGE — Broadcast\\n"
+                    "/banall GROUP_ID — Ban accessible non-admin members\\n"
+                    "/banuser GROUP_ID USER_ID\\n/unbanuser GROUP_ID USER_ID\\n"
+                    "/kick GROUP_ID USER_ID\\n/mute GROUP_ID USER_ID [minutes]\\n"
+                    "/unmute GROUP_ID USER_ID\\n/chatsearch GROUP_ID words\\n"
+                    "Music: /play, /vplay, /queue, /pause, /resume, /skip, /stop")
+        if m.chat.type in ("group", "supergroup"):
+            try:
+                member = await bot.get_chat_member(m.chat.id, m.from_user.id)
+                status = str(member.status).lower()
+                if status.endswith("administrator") or status.endswith("owner"):
+                    return ("🎧 **GROUP ADMIN / OWNER**\\n"
+                            "/play SONG — Play music\\n/vplay URL — Play video\\n/queue\\n"
+                            "/pause • /resume • /skip • /stop\\n"
+                            "/auth (reply to a member) • /unauth (reply to a member)\\n"
+                            "/voteskip — Open a skip vote\\n/ping • /settings")
+                import sqlite3
+                with sqlite3.connect(DB_PATH) as db:
+                    authorized = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
+                if authorized:
+                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\\n/play SONG • /vplay URL\\n"
+                            "/queue • /pause • /resume • /skip • /stop\\n/voteskip • /ping • /settings")
+            except Exception:
+                pass
+        return ("🎶 **MEMBER COMMANDS**\\n/voteskip — Vote to skip the current track\\n"
+                "/ping — Check bot status\\n/settings — View music settings\\n/help — Show commands")
+
     @bot.on_message(filters.command("start"))
     async def start(_, m):
         if m.from_user and m.from_user.id not in state["users"]:
             state["users"].append(m.from_user.id)
-        await reply(m, "🎵 **ALEXA 0.2 Music**\nFree group music bot. Add me to a group, start its voice chat, then use /play.\nUse /help for commands.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Add to Group", url="https://t.me/" + (await bot.get_me()).username + "?startgroup=true")]]))
+        me = await bot.get_me()
+        caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\\n"
+                   "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\\n\\n"
+                   "🎵 Smooth playback • Smart controls\\n"
+                   "🗳️ Community vote-to-skip • Group permissions\\n\\n"
+                   "➕ Add Alexa to your group, start a voice chat, and enjoy!")
+        markup = start_keyboard(me.username)
+        photo_url = os.getenv("START_IMAGE_URL", "").strip()
+        try:
+            if photo_url:
+                await bot.send_photo(m.chat.id, photo=photo_url, caption=caption, reply_markup=markup)
+            else:
+                await reply(m, caption, reply_markup=markup)
+        except Exception:
+            await reply(m, caption, reply_markup=markup)
 
     @bot.on_message(filters.command("help"))
     async def help_cmd(_, m):
-        await reply(m, "**Commands**\n/play song or YouTube URL\n/vplay YouTube URL\n/queue\n/pause\n/resume\n/skip\n/stop\n/ping\n/settings\n\nOwner: /stats and /broadcast message")
+        await reply(m, await role_help(m))
 
     @bot.on_message(filters.command("ping"))
     async def ping(_, m):
