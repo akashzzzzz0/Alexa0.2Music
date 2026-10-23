@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+downloads/
+data.json
+*.session
+*.session-journal
