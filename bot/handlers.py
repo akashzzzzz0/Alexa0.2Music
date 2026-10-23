@@ -206,6 +206,45 @@ def register_handlers(bot, calls, state):
     async def settings(_, m):
         await reply(m, "⚙️ Duration limit: " + str(state["duration_limit"]) + " seconds. All features are free.")
 
+    @bot.on_message(filters.command("reload") & (filters.group | filters.private))
+    async def reload_cache(_, m):
+        # Refresh Telegram's admin list for this group and reload runtime settings.
+        # Playback and queued tracks are deliberately preserved.
+        if not m.from_user:
+            return await reply(m, "Cannot identify the command sender.")
+        is_owner = m.from_user.id == state["owner_id"]
+        group_id = m.chat.id
+        is_group = m.chat.type in ("group", "supergroup")
+        if not is_owner:
+            if not is_group:
+                return await reply(m, "Only the bot owner can use /reload in private chat.")
+            try:
+                member = await bot.get_chat_member(group_id, m.from_user.id)
+                status = str(member.status).lower()
+                if not (status.endswith("administrator") or status.endswith("owner")):
+                    return await reply(m, "⛔ Only this group's admins/owner or the bot owner can use /reload.")
+            except Exception:
+                return await reply(m, "Could not verify your admin status. Please try again.")
+        try:
+            admin_count = None
+            if is_group:
+                admin_ids = set()
+                async for member in bot.get_chat_members(group_id, filter=ChatMembersFilter.ADMINISTRATORS):
+                    admin_ids.add(member.user.id)
+                state.setdefault("admin_cache", {})[group_id] = admin_ids
+                admin_count = len(admin_ids)
+            state["duration_limit"] = int(os.getenv("DURATION_LIMIT", str(state["duration_limit"])))
+            active = len(CURRENT)
+            queued = sum(len(items) for items in QUEUES.values())
+            result = ["✅ **Alexa reload complete**", "⚙️ Runtime settings refreshed."]
+            if admin_count is not None:
+                result.append(f"👮 Admin list refreshed: {admin_count} admins.")
+            result.append(f"🎵 Active chats: {active} • Queued tracks: {queued}")
+            result.append("Playback and queues were kept running.")
+            await reply(m, "\\n".join(result))
+        except Exception as e:
+            await reply(m, "❌ Reload failed: " + str(e)[:180])
+
     async def manage_auth(m, authorize):
         if m.chat.type not in ("group", "supergroup") or not m.from_user:
             return await reply(m, "Use /auth or /unauth in the group.")
