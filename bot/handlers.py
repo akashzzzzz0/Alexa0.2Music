@@ -65,6 +65,8 @@ def register_handlers(bot, calls, state):
     async def request(m, video):
         if m.chat.type not in ("group", "supergroup"):
             return await reply(m, "Use this command in a group.")
+        if m.chat.id not in state["groups"]:
+            state["groups"].append(m.chat.id)
         query = " ".join(m.command[1:]).strip()
         if not query:
             return await reply(m, "Give a song name or URL. Example: /play lo-fi music")
@@ -162,3 +164,42 @@ def register_handlers(bot, calls, state):
                 failed += 1
             await asyncio.sleep(0.05)
         await reply(m, "Broadcast complete. Sent: " + str(sent) + ", failed: " + str(failed) + ".")
+
+    # Owner dashboard; callbacks are restricted to the configured owner.
+    def owner_keyboard():
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Statistics", callback_data="own:stats"), InlineKeyboardButton("👥 Users", callback_data="own:users")],
+            [InlineKeyboardButton("💬 Groups", callback_data="own:groups"), InlineKeyboardButton("📢 Broadcast help", callback_data="own:broadcast")],
+            [InlineKeyboardButton("🔄 Refresh", callback_data="own:home")]
+        ])
+
+    @bot.on_message(filters.command("owner") & owner)
+    async def owner_panel(_, m):
+        await reply(m, "🛡️ **ALEXA 0.2 MUSIC — OWNER PANEL**\\nChoose a section below. Only the configured owner can open this panel.", reply_markup=owner_keyboard())
+
+    @bot.on_callback_query(filters.regex(r"^own:"))
+    async def owner_panel_callback(_, query):
+        if not query.from_user or query.from_user.id != state["owner_id"]:
+            await query.answer("Owner only.", show_alert=True)
+            return
+        action = query.data.split(":", 1)[1]
+        if action in ("home", "stats"):
+            text = ("🛡️ **OWNER PANEL**\\n" if action == "home" else "📊 **BOT STATISTICS**\\n")
+            text += f"Known users: {len(state['users'])}\\nKnown groups: {len(state['groups'])}\\nTracks started: {state['plays']}\\nDuration limit: {state['duration_limit']} seconds"
+        elif action == "users":
+            ids = state["users"]
+            preview = "\\n".join(str(x) for x in ids[-30:]) if ids else "No users recorded yet."
+            text = f"👥 **USERS ({len(ids)})**\\nLatest recorded IDs:\\n{preview}"
+        elif action == "groups":
+            ids = state["groups"]
+            preview = "\\n".join(str(x) for x in ids[-30:]) if ids else "No groups recorded yet."
+            text = f"💬 **GROUPS ({len(ids)})**\\nLatest recorded group IDs:\\n{preview}"
+        elif action == "broadcast":
+            text = "📢 **BROADCAST**\\nSend /broadcast your message in this chat to broadcast to recorded users and groups."
+        else:
+            text = "Unknown panel section."
+        await query.answer()
+        try:
+            await query.message.edit_text(text, reply_markup=owner_keyboard(), disable_web_page_preview=True)
+        except Exception:
+            await query.message.reply_text(text, reply_markup=owner_keyboard(), disable_web_page_preview=True)
