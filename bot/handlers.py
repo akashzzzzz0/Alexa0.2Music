@@ -151,7 +151,7 @@ def register_handlers(bot, calls, state):
                     "/banall GROUP_ID — Ban accessible non-admin members\\n"
                     "/banuser GROUP_ID USER_ID\\n/unbanuser GROUP_ID USER_ID\\n"
                     "/kick GROUP_ID USER_ID\\n/mute GROUP_ID USER_ID [minutes]\\n"
-                    "/unmute GROUP_ID USER_ID\\n/chatsearch GROUP_ID words\\n"
+                    "/unmute GROUP_ID USER_ID\\n/chatsearch GROUP_ID words\\n/reload — Refresh admin cache/settings\\n"
                     "Music: /play, /vplay, /queue, /pause, /resume, /skip, /stop")
         if m.chat.type in ("group", "supergroup"):
             try:
@@ -162,7 +162,7 @@ def register_handlers(bot, calls, state):
                             "/play SONG — Play music\\n/vplay URL — Play video\\n/queue\\n"
                             "/pause • /resume • /skip • /stop\\n"
                             "/auth (reply to a member) • /unauth (reply to a member)\\n"
-                            "/voteskip — Open a skip vote\\n/ping • /settings")
+                            "/voteskip — Open a skip vote\\n/reload — Refresh admin cache/settings\\n/ping • /settings")
                 import sqlite3
                 with sqlite3.connect(DB_PATH) as db:
                     authorized = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
