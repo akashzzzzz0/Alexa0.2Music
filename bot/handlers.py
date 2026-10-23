@@ -11,6 +11,7 @@ DIR = Path("downloads")
 DIR.mkdir(exist_ok=True)
 QUEUES = {}
 CURRENT = {}
+AUTOPLAY = {}
 
 def register_handlers(bot, calls, state):
     owner = filters.user(state["owner_id"])
@@ -20,7 +21,11 @@ def register_handlers(bot, calls, state):
     async def fetch(query, video):
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
-                "format": "best[height<=720][ext=mp4]/best" if video else "bestaudio/best"}
+                "format": "best[height<=720][ext=mp4]/best" if video else "bestaudio[acodec!=none]/bestaudio/best",
+                "concurrent_fragment_downloads": 4,
+                "retries": 10,
+                "fragment_retries": 10,
+                "file_access_retries": 3}
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, query, download=True)
             if info.get("entries"):
@@ -55,11 +60,26 @@ def register_handlers(bot, calls, state):
             except OSError:
                 logging.exception("Could not remove finished media file")
         next_items = QUEUES.get(chat_id, [])
-        if next_items:
-            next_item = next_items.pop(0)
+        next_item = next_items.pop(0) if next_items else None
+        if next_item is None and AUTOPLAY.get(chat_id, False) and finished:
+            # Search for a related follow-up; avoid replaying the exact same title.
+            seed = finished["title"]
+            try:
+                next_item = await fetch("ytsearch5:" + seed + " similar songs mix", False)
+                if next_item["title"].strip().casefold() == seed.strip().casefold():
+                    Path(next_item["path"]).unlink(missing_ok=True)
+                    next_item = None
+            except Exception:
+                logging.exception("Autoplay could not find a follow-up for %s", chat_id)
+                next_item = None
+        if next_item:
             try:
                 await start_item(chat_id, next_item)
                 logging.info("Auto-advanced queue in %s to %s", chat_id, next_item["title"])
+                try:
+                    await bot.send_message(chat_id, "🎵 Now playing: **" + next_item["title"] + "**")
+                except Exception:
+                    logging.exception("Could not announce next track")
             except Exception:
                 logging.exception("Could not auto-advance queue in %s", chat_id)
                 try:
@@ -182,14 +202,14 @@ def register_handlers(bot, calls, state):
                     "/banuser GROUP_ID USER_ID\n/unbanuser GROUP_ID USER_ID\n"
                     "/kick GROUP_ID USER_ID\n/mute GROUP_ID USER_ID [minutes]\n"
                     "/unmute GROUP_ID USER_ID\n/chatsearch GROUP_ID words\n/reload — Refresh admin cache/settings\n"
-                    "Music: /play, /vplay, /queue, /pause, /resume, /skip, /stop")
+                    "Music: /play, /vplay, /queue, /autoplay on|off, /pause, /resume, /skip, /stop")
         if m.chat.type in ("group", "supergroup"):
             try:
                 member = await bot.get_chat_member(m.chat.id, m.from_user.id)
                 status = str(member.status).lower()
                 if status.endswith("administrator") or status.endswith("owner"):
                     return ("🎧 **GROUP ADMIN / OWNER**\n"
-                            "/play SONG — Play music\n/vplay URL — Play video\n/queue\n"
+                            "/play SONG — Search and play music\n/vplay URL — Play video\n/queue • /autoplay on|off\n"
                             "/pause • /resume • /skip • /stop\n"
                             "/auth (reply to a member) • /unauth (reply to a member)\n"
                             "/voteskip — Open a skip vote\n/reload — Refresh admin cache/settings\n/ping • /settings")
@@ -197,7 +217,7 @@ def register_handlers(bot, calls, state):
                 with sqlite3.connect(DB_PATH) as db:
                     authorized = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
                 if authorized:
-                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\n/play SONG • /vplay URL\n"
+                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\n/play SONG • /vplay URL • /autoplay on|off\n"
                             "/queue • /pause • /resume • /skip • /stop\n/voteskip • /ping • /settings")
             except Exception:
                 pass
@@ -345,7 +365,7 @@ def register_handlers(bot, calls, state):
         if not query:
             return await reply(m, "Give a song name or URL. Example: /play lo-fi music")
         if not re.match(r"^https?://", query):
-            query = "ytsearch1:" + query
+            query = "ytsearch5:" + query
         status = await m.reply_text("🔎 Preparing media…")
         try:
             item = await fetch(query, video)
@@ -371,6 +391,22 @@ def register_handlers(bot, calls, state):
     async def vplay(_, m):
         if await music_admin_only(m):
             await request(m, True)
+
+    @bot.on_message(filters.command("autoplay") & filters.group)
+    async def autoplay_cmd(_, m):
+        if not await music_admin_only(m):
+            return
+        arg = (m.command[1].lower() if len(m.command) > 1 else "status")
+        if arg in ("on", "yes", "enable", "1"):
+            AUTOPLAY[m.chat.id] = True
+            await reply(m, "🔁 Autoplay enabled. When the queue is empty, Alexa will search for a related next track.")
+        elif arg in ("off", "no", "disable", "0"):
+            AUTOPLAY[m.chat.id] = False
+            await reply(m, "⏹ Autoplay disabled.")
+        elif arg == "status":
+            await reply(m, "🔁 Autoplay is " + ("ON" if AUTOPLAY.get(m.chat.id, False) else "OFF") + ". Use /autoplay on or /autoplay off.")
+        else:
+            await reply(m, "Usage: /autoplay on | /autoplay off")
 
     @bot.on_message(filters.command("queue"))
     async def queue(_, m):
