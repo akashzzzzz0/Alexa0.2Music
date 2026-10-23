@@ -1,0 +1,33 @@
+name: Music bot checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  syntax-and-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Compile Python files
+        run: python -m compileall -q bot
+      - name: Verify required runtime imports
+        run: |
+          python -c "import pyrogram, yt_dlp; from pytgcalls import PyTgCalls, filters; from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, StreamEnded; print('Telegram, downloader and voice-call imports OK')"
+          ffmpeg -version
