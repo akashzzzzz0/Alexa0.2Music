@@ -147,6 +147,25 @@ def register_handlers(bot, calls, state):
     async def settings(_, m):
         await reply(m, "⚙️ Duration limit: " + str(state["duration_limit"]) + " seconds. All features are free.")
 
+    async def music_admin_only(m):
+        # The configured bot owner has global access; otherwise only this group's
+        # owner/admins can control playback.
+        if m.from_user and m.from_user.id == state["owner_id"]:
+            return True
+        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+            await reply(m, "Use this command in a group.")
+            return False
+        try:
+            member = await bot.get_chat_member(m.chat.id, m.from_user.id)
+            status = str(member.status).lower()
+            if status.endswith("administrator") or status.endswith("owner"):
+                return True
+            await reply(m, "🎵 Music controls are available to this group's admins and owner only.")
+            return False
+        except Exception:
+            await reply(m, "I couldn't verify your group admin status. Please try again.")
+            return False
+
     async def request(m, video):
         if m.chat.type not in ("group", "supergroup"):
             return await reply(m, "Use this command in a group.")
@@ -175,14 +194,18 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("play") & filters.group)
     async def play(_, m):
-        await request(m, False)
+        if await music_admin_only(m):
+            await request(m, False)
 
     @bot.on_message(filters.command("vplay") & filters.group)
     async def vplay(_, m):
-        await request(m, True)
+        if await music_admin_only(m):
+            await request(m, True)
 
     @bot.on_message(filters.command("queue"))
     async def queue(_, m):
+        if not await music_admin_only(m):
+            return
         items = QUEUES.get(m.chat.id, [])
         current = CURRENT.get(m.chat.id)
         lines = ["🎶 Now: " + current["title"] if current else "Nothing is playing."]
@@ -191,6 +214,8 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("pause") & filters.group)
     async def pause(_, m):
+        if not await music_admin_only(m):
+            return
         try:
             await calls.pause_stream(m.chat.id)
             await reply(m, "⏸ Paused.")
@@ -199,6 +224,8 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("resume") & filters.group)
     async def resume(_, m):
+        if not await music_admin_only(m):
+            return
         try:
             await calls.resume_stream(m.chat.id)
             await reply(m, "▶️ Resumed.")
@@ -207,6 +234,8 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("skip") & filters.group)
     async def skip(_, m):
+        if not await music_admin_only(m):
+            return
         cid = m.chat.id
         try:
             await calls.leave_call(cid)
@@ -222,6 +251,8 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("stop") & filters.group)
     async def stop(_, m):
+        if not await music_admin_only(m):
+            return
         cid = m.chat.id
         QUEUES.pop(cid, None)
         CURRENT.pop(cid, None)
