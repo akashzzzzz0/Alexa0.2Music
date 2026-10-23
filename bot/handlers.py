@@ -1,4 +1,4 @@
-import asyncio, os, re, time
+import asyncio, logging, os, re, time
 from pathlib import Path
 import yt_dlp
 from pyrogram import filters
@@ -36,13 +36,13 @@ def register_handlers(bot, calls, state):
                     "path": path, "video": video}
 
     async def start_item(chat_id, item):
-        CURRENT[chat_id] = item
         if item["video"]:
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH,
                                 video_parameters=VideoQuality.HD_720p)
         else:
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH)
         await calls.play(chat_id, media)
+        CURRENT[chat_id] = item
 
     # Store group message metadata and text for owner-only search.
     import sqlite3
@@ -124,8 +124,8 @@ def register_handlers(bot, calls, state):
                 return await reply(m, "No matching stored messages found. Only messages received after recording was enabled can be searched.")
             lines = [f"🔎 Results for group {group_id}:"]
             for name, username, uid, body, sent_at in rows:
-                lines.append(f"{name} (@{username or 'none'}, ID {uid}) — {time.strftime('%Y-%m-%d %H:%M', time.localtime(sent_at))}\\n{body[:500]}")
-            await reply(m, "\\n\\n".join(lines)[:3900])
+                lines.append(f"{name} (@{username or 'none'}, ID {uid}) — {time.strftime('%Y-%m-%d %H:%M', time.localtime(sent_at))}\n{body[:500]}")
+            await reply(m, "\n\n".join(lines)[:3900])
         except Exception as e:
             await reply(m, "Search failed: " + str(e)[:180])
 
@@ -146,43 +146,43 @@ def register_handlers(bot, calls, state):
         if not m.from_user:
             return "🎵 Use /help in a group to see available commands."
         if m.from_user.id == state["owner_id"]:
-            return ("🛡️ **BOT OWNER — GLOBAL ACCESS**\\n"
-                    "/owner — Owner Panel\\n/stats — Statistics\\n/broadcast MESSAGE — Broadcast\\n"
-                    "/banall GROUP_ID — Ban accessible non-admin members\\n"
-                    "/banuser GROUP_ID USER_ID\\n/unbanuser GROUP_ID USER_ID\\n"
-                    "/kick GROUP_ID USER_ID\\n/mute GROUP_ID USER_ID [minutes]\\n"
-                    "/unmute GROUP_ID USER_ID\\n/chatsearch GROUP_ID words\\n/reload — Refresh admin cache/settings\\n"
+            return ("🛡️ **BOT OWNER — GLOBAL ACCESS**\n"
+                    "/owner — Owner Panel\n/stats — Statistics\n/broadcast MESSAGE — Broadcast\n"
+                    "/banall GROUP_ID — Ban accessible non-admin members\n"
+                    "/banuser GROUP_ID USER_ID\n/unbanuser GROUP_ID USER_ID\n"
+                    "/kick GROUP_ID USER_ID\n/mute GROUP_ID USER_ID [minutes]\n"
+                    "/unmute GROUP_ID USER_ID\n/chatsearch GROUP_ID words\n/reload — Refresh admin cache/settings\n"
                     "Music: /play, /vplay, /queue, /pause, /resume, /skip, /stop")
         if m.chat.type in ("group", "supergroup"):
             try:
                 member = await bot.get_chat_member(m.chat.id, m.from_user.id)
                 status = str(member.status).lower()
                 if status.endswith("administrator") or status.endswith("owner"):
-                    return ("🎧 **GROUP ADMIN / OWNER**\\n"
-                            "/play SONG — Play music\\n/vplay URL — Play video\\n/queue\\n"
-                            "/pause • /resume • /skip • /stop\\n"
-                            "/auth (reply to a member) • /unauth (reply to a member)\\n"
-                            "/voteskip — Open a skip vote\\n/reload — Refresh admin cache/settings\\n/ping • /settings")
+                    return ("🎧 **GROUP ADMIN / OWNER**\n"
+                            "/play SONG — Play music\n/vplay URL — Play video\n/queue\n"
+                            "/pause • /resume • /skip • /stop\n"
+                            "/auth (reply to a member) • /unauth (reply to a member)\n"
+                            "/voteskip — Open a skip vote\n/reload — Refresh admin cache/settings\n/ping • /settings")
                 import sqlite3
                 with sqlite3.connect(DB_PATH) as db:
                     authorized = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
                 if authorized:
-                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\\n/play SONG • /vplay URL\\n"
-                            "/queue • /pause • /resume • /skip • /stop\\n/voteskip • /ping • /settings")
+                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\n/play SONG • /vplay URL\n"
+                            "/queue • /pause • /resume • /skip • /stop\n/voteskip • /ping • /settings")
             except Exception:
                 pass
-        return ("🎶 **MEMBER COMMANDS**\\n/voteskip — Vote to skip the current track\\n"
-                "/ping — Check bot status\\n/settings — View music settings\\n/help — Show commands")
+        return ("🎶 **MEMBER COMMANDS**\n/voteskip — Vote to skip the current track\n"
+                "/ping — Check bot status\n/settings — View music settings\n/help — Show commands")
 
     @bot.on_message(filters.command("start"))
     async def start(_, m):
         if m.from_user and m.from_user.id not in state["users"]:
             state["users"].append(m.from_user.id)
         me = await bot.get_me()
-        caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\\n"
-                   "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\\n\\n"
-                   "🎵 Smooth playback • Smart controls\\n"
-                   "🗳️ Community vote-to-skip • Group permissions\\n\\n"
+        caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\n"
+                   "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\n\n"
+                   "🎵 Smooth playback • Smart controls\n"
+                   "🗳️ Community vote-to-skip • Group permissions\n\n"
                    "➕ Add Alexa to your group, start a voice chat, and enjoy!")
         markup = start_keyboard(me.username)
         photo_url = os.getenv("START_IMAGE_URL", "").strip()
@@ -241,7 +241,7 @@ def register_handlers(bot, calls, state):
                 result.append(f"👮 Admin list refreshed: {admin_count} admins.")
             result.append(f"🎵 Active chats: {active} • Queued tracks: {queued}")
             result.append("Playback and queues were kept running.")
-            await reply(m, "\\n".join(result))
+            await reply(m, "\n".join(result))
         except Exception as e:
             await reply(m, "❌ Reload failed: " + str(e)[:180])
 
@@ -382,10 +382,10 @@ def register_handlers(bot, calls, state):
             return await reply(m, "Nothing is playing right now.")
         VOTES[cid] = {"voters": set(), "message_id": None}
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Vote to skip (0/3)", callback_data=f"musicvote:{cid}")]])
-        msg = await reply(m, "🗳️ **Vote to skip this track**\\nThree different group members are needed. Group admins can use /skip directly.", reply_markup=kb)
+        msg = await reply(m, "🗳️ **Vote to skip this track**\nThree different group members are needed. Group admins can use /skip directly.", reply_markup=kb)
         VOTES[cid]["message_id"] = msg.id
 
-    @bot.on_callback_query(filters.regex(r"^musicvote:-?\\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicvote:-?\d+$"))
     async def vote_skip_callback(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify voter.", show_alert=True)
@@ -470,17 +470,17 @@ def register_handlers(bot, calls, state):
     @bot.on_message(filters.command("banall") & owner)
     async def owner_ban_all(_, m):
         if len(m.command) != 2:
-            return await reply(m, "Usage: /banall GROUP_ID\\nThis targets only that group and skips admins and bot accounts.")
+            return await reply(m, "Usage: /banall GROUP_ID\nThis targets only that group and skips admins and bot accounts.")
         try:
             group_id = int(m.command[1])
             chat = await bot.get_chat(group_id)
             pending_ban_all[m.from_user.id] = group_id
-            await reply(m, f"⚠️ **Confirm Ban All**\\nGroup: {chat.title or group_id}\\nID: `{group_id}`\\nAll accessible non-admin human members will be banned. Admins and bot accounts are excluded. This cannot be easily reversed for many users.", reply_markup=InlineKeyboardMarkup([
+            await reply(m, f"⚠️ **Confirm Ban All**\nGroup: {chat.title or group_id}\nID: `{group_id}`\nAll accessible non-admin human members will be banned. Admins and bot accounts are excluded. This cannot be easily reversed for many users.", reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ Confirm Ban All", callback_data=f"own:banallconfirm:{group_id}")],
                 [InlineKeyboardButton("❌ Cancel", callback_data="own:banallcancel")]
             ]))
         except Exception as e:
-            await reply(m, "Could not load target group. Check its ID and Alexa's admin permissions.\\n" + str(e)[:180])
+            await reply(m, "Could not load target group. Check its ID and Alexa's admin permissions.\n" + str(e)[:180])
 
     @bot.on_callback_query(filters.regex(r"^own:banall"))
     async def owner_ban_all_callback(_, query):
@@ -514,9 +514,9 @@ def register_handlers(bot, calls, state):
                     failed += 1
                 await asyncio.sleep(0.08)
             pending_ban_all.pop(query.from_user.id, None)
-            await query.message.edit_text(f"🛡️ **Ban All finished**\\nGroup ID: `{group_id}`\\nBanned: {banned}\\nFailed: {failed}\\nSkipped admins/bots: {skipped}")
+            await query.message.edit_text(f"🛡️ **Ban All finished**\nGroup ID: `{group_id}`\nBanned: {banned}\nFailed: {failed}\nSkipped admins/bots: {skipped}")
         except Exception as e:
-            await query.message.reply_text("Ban All stopped/failed. Check Alexa's ban-users permission and group access.\\n" + str(e)[:220])
+            await query.message.reply_text("Ban All stopped/failed. Check Alexa's ban-users permission and group access.\n" + str(e)[:220])
 
     @bot.on_message(filters.command("banuser") & owner)
     async def owner_ban_user(_, m):
@@ -592,7 +592,7 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("owner") & owner)
     async def owner_panel(_, m):
-        await reply(m, "🛡️ **ALEXA 0.2 MUSIC — OWNER PANEL**\\nChoose a section below. Only the configured owner can open this panel.", reply_markup=owner_keyboard())
+        await reply(m, "🛡️ **ALEXA 0.2 MUSIC — OWNER PANEL**\nChoose a section below. Only the configured owner can open this panel.", reply_markup=owner_keyboard())
 
     @bot.on_callback_query(filters.regex(r"^own:"))
     async def owner_panel_callback(_, query):
@@ -601,12 +601,12 @@ def register_handlers(bot, calls, state):
             return
         action = query.data.split(":", 1)[1]
         if action in ("home", "stats"):
-            text = ("🛡️ **OWNER PANEL**\\n" if action == "home" else "📊 **BOT STATISTICS**\\n")
-            text += f"Known users: {len(state['users'])}\\nKnown groups: {len(state['groups'])}\\nTracks started: {state['plays']}\\nDuration limit: {state['duration_limit']} seconds"
+            text = ("🛡️ **OWNER PANEL**\n" if action == "home" else "📊 **BOT STATISTICS**\n")
+            text += f"Known users: {len(state['users'])}\nKnown groups: {len(state['groups'])}\nTracks started: {state['plays']}\nDuration limit: {state['duration_limit']} seconds"
         elif action == "users":
             ids = state["users"]
-            preview = "\\n".join(str(x) for x in ids[-30:]) if ids else "No users recorded yet."
-            text = f"👥 **USERS ({len(ids)})**\\nLatest recorded IDs:\\n{preview}"
+            preview = "\n".join(str(x) for x in ids[-30:]) if ids else "No users recorded yet."
+            text = f"👥 **USERS ({len(ids)})**\nLatest recorded IDs:\n{preview}"
         elif action == "groups":
             import sqlite3
             try:
@@ -622,14 +622,14 @@ def register_handlers(bot, calls, state):
                                 link = (await bot.create_chat_invite_link(gid, name="Alexa Owner Panel")).invite_link
                             except Exception:
                                 link = "Invite link unavailable; check Alexa's admin permissions."
-                        lines.append(f"{title} | ID: {gid}\\n{link}")
+                        lines.append(f"{title} | ID: {gid}\n{link}")
                     except Exception:
                         lines.append(f"{title} | ID: {gid} | inaccessible")
-                text = "\\n\\n".join(lines) if stored else "No groups recorded yet."
+                text = "\n\n".join(lines) if stored else "No groups recorded yet."
             except Exception as e:
                 text = "Could not load groups: " + str(e)[:160]
         elif action == "broadcast":
-            text = "📢 **BROADCAST**\\nSend /broadcast your message in this chat to broadcast to recorded users and groups."
+            text = "📢 **BROADCAST**\nSend /broadcast your message in this chat to broadcast to recorded users and groups."
         else:
             text = "Unknown panel section."
         await query.answer()
