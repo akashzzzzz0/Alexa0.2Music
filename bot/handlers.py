@@ -130,8 +130,8 @@ def register_handlers(bot, calls, state):
             await reply(m, "Search failed: " + str(e)[:180])
 
     def start_keyboard(username):
-        updates_url = os.getenv("UPDATES_URL", "https://t.me/+X5aelUHksVRlODQ8").strip()
-        discuss_url = os.getenv("DISCUSSION_URL", "https://t.me/+dGq9_BqdD5hjYzk0").strip()
+        updates_url = os.getenv("UPDATES_URL", "https://t.me/alexa_bot_updats").strip()
+        discuss_url = os.getenv("DISCUSSION_URL", "https://t.me/alexa_Bot_discussion").strip()
         rows = [[InlineKeyboardButton("♛ 𝑨𝑫𝑫 𝑨𝑳𝑬𝑿𝑨 𝑰𝑵 𝒀𝑶𝑼𝑹 𝑮𝑹𝑶𝑼𝑷 ♛", url=f"https://t.me/{username}?startgroup=true")]]
         community = []
         if updates_url:
