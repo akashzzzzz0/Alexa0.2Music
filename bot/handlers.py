@@ -4,7 +4,8 @@ import yt_dlp
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
-from pytgcalls.types import MediaStream, AudioQuality, VideoQuality
+from pytgcalls import filters as tgcall_filters
+from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, StreamEnded
 
 DIR = Path("downloads")
 DIR.mkdir(exist_ok=True)
@@ -43,6 +44,35 @@ def register_handlers(bot, calls, state):
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH)
         await calls.play(chat_id, media)
         CURRENT[chat_id] = item
+
+    @calls.on_update(tgcall_filters.stream_end())
+    async def handle_stream_end(_, update: StreamEnded):
+        chat_id = update.chat_id
+        finished = CURRENT.pop(chat_id, None)
+        if finished:
+            try:
+                Path(finished["path"]).unlink(missing_ok=True)
+            except OSError:
+                logging.exception("Could not remove finished media file")
+        next_items = QUEUES.get(chat_id, [])
+        if next_items:
+            next_item = next_items.pop(0)
+            try:
+                await start_item(chat_id, next_item)
+                logging.info("Auto-advanced queue in %s to %s", chat_id, next_item["title"])
+            except Exception:
+                logging.exception("Could not auto-advance queue in %s", chat_id)
+                try:
+                    await bot.send_message(chat_id, "❌ Next track failed to start. Try /skip or /play again.")
+                except Exception:
+                    logging.exception("Could not report queue playback failure")
+                CURRENT.pop(chat_id, None)
+        else:
+            QUEUES.pop(chat_id, None)
+            try:
+                await calls.leave_call(chat_id)
+            except Exception:
+                logging.exception("Could not leave voice chat after queue ended")
 
     # Store group message metadata and text for owner-only search.
     import sqlite3
