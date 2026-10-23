@@ -222,6 +222,60 @@ def register_handlers(bot, calls, state):
             await asyncio.sleep(0.05)
         await reply(m, "Broadcast complete. Sent: " + str(sent) + ", failed: " + str(failed) + ".")
 
+    # Owner-only Ban All: only the selected group, excludes administrators and bot accounts.
+    pending_ban_all = {}
+
+    @bot.on_message(filters.command("banall") & owner)
+    async def owner_ban_all(_, m):
+        if len(m.command) != 2:
+            return await reply(m, "Usage: /banall GROUP_ID\\nThis targets only that group and skips admins and bot accounts.")
+        try:
+            group_id = int(m.command[1])
+            chat = await bot.get_chat(group_id)
+            pending_ban_all[m.from_user.id] = group_id
+            await reply(m, f"⚠️ **Confirm Ban All**\\nGroup: {chat.title or group_id}\\nID: `{group_id}`\\nAll accessible non-admin human members will be banned. Admins and bot accounts are excluded. This cannot be easily reversed for many users.", reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirm Ban All", callback_data=f"own:banallconfirm:{group_id}")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="own:banallcancel")]
+            ]))
+        except Exception as e:
+            await reply(m, "Could not load target group. Check its ID and Alexa's admin permissions.\\n" + str(e)[:180])
+
+    @bot.on_callback_query(filters.regex(r"^own:banall"))
+    async def owner_ban_all_callback(_, query):
+        if not query.from_user or query.from_user.id != state["owner_id"]:
+            await query.answer("Owner only.", show_alert=True)
+            return
+        action = query.data.split(":")
+        if action[1] == "banallcancel":
+            pending_ban_all.pop(query.from_user.id, None)
+            await query.answer("Cancelled.")
+            return await query.message.edit_text("Ban All cancelled.")
+        try:
+            group_id = int(action[2])
+            if pending_ban_all.get(query.from_user.id) != group_id:
+                await query.answer("No matching pending confirmation.", show_alert=True)
+                return
+            await query.answer("Starting. This may take time.", show_alert=True)
+            admin_ids = set()
+            async for member in bot.get_chat_members(group_id, filter="administrators"):
+                admin_ids.add(member.user.id)
+            banned = failed = skipped = 0
+            async for member in bot.get_chat_members(group_id):
+                user = member.user
+                if user.id in admin_ids or user.is_bot:
+                    skipped += 1
+                    continue
+                try:
+                    await bot.ban_chat_member(group_id, user.id)
+                    banned += 1
+                except Exception:
+                    failed += 1
+                await asyncio.sleep(0.08)
+            pending_ban_all.pop(query.from_user.id, None)
+            await query.message.edit_text(f"🛡️ **Ban All finished**\\nGroup ID: `{group_id}`\\nBanned: {banned}\\nFailed: {failed}\\nSkipped admins/bots: {skipped}")
+        except Exception as e:
+            await query.message.reply_text("Ban All stopped/failed. Check Alexa's ban-users permission and group access.\\n" + str(e)[:220])
+
     # Owner dashboard; callbacks are restricted to the configured owner.
     def owner_keyboard():
         return InlineKeyboardMarkup([
