@@ -24,3 +24,41 @@ Set `OWNER_ID` to the owner's numeric Telegram ID. Owner-only commands:
 Group member IDs are recorded when Alexa receives group messages. Message text is stored for search only after a group administrator runs `/enablelogs`; `/disablelogs` stops new message storage. Group admins should inform members before enabling logging. The bot can only record messages Telegram delivers to it and cannot retrieve old or hidden chats. Search results are private to the configured owner through the bot's private chat.
 
 SQLite data is stored in `alexa_music.sqlite3` by default. Use `ALEXA_DB_PATH` to choose a persistent disk location on your host. Keep that file private and back it up securely.
+
+
+## Deploy on Botkeep
+
+Botkeep supports importing a Python project from GitHub. The repository root contains `requirements.txt`, and the intended startup command is:
+
+```bash
+python -m bot
+```
+
+1. Open [Botkeep](https://botkeep.cloud/) and create a Python workload.
+2. In the GitHub tab, connect GitHub and select `akashzzzzz0/Alexa0.2Music`, then select the branch you want to deploy.
+3. Set the project root to the repository root (the folder containing `requirements.txt`).
+4. Choose Python 3.11 if it is available and set the start command to `python -m bot`.
+5. In the workload's Environment settings, add the variables below. Enter your real values privately in Botkeep; do not commit them to GitHub.
+6. Start/deploy the workload and inspect Console logs. A successful deploy/build alone does not prove that Telegram voice playback works.
+
+Required environment variables:
+
+- `BOT_TOKEN` — token from BotFather.
+- `API_ID` and `API_HASH` — Telegram application credentials.
+- `SESSION_STRING` — Pyrogram user session string required by the current voice-chat implementation. Treat it like a password and never share it.
+- `OWNER_ID` — bot owner's numeric Telegram ID.
+
+Optional variables:
+
+- `DURATION_LIMIT` — maximum track duration in seconds (default `3600`).
+- `UPDATES_URL`, `DISCUSSION_URL` — links shown in the start menu.
+- `START_IMAGE_URL` — publicly reachable image URL for the start screen; leave blank for text-only.
+- `ALEXA_DB_PATH` — path to the SQLite database. Use a path on storage that Botkeep explicitly keeps persistent, if available.
+
+### Important Botkeep compatibility checks
+
+The music bot needs FFmpeg and PyTgCalls' native/runtime requirements. The current repository includes a Dockerfile that installs FFmpeg, but do not assume Botkeep's standard Python runtime runs that Dockerfile automatically. Before relying on voice playback, confirm the selected Botkeep runtime supports FFmpeg and PyTgCalls, or choose a supported container/Docker deployment if Botkeep offers it for your account. The free workload has limited shared resources, so memory/CPU limits may affect downloads and playback.
+
+SQLite files, downloaded media, and in-memory queues may not survive replacement/redeployment unless their storage location is persistent. Configure persistent storage if available and back up the database. Never run two copies of this bot with the same Telegram credentials at the same time.
+
+For Botkeep's current workflow, see its [GitHub deployment guide](https://botkeep.cloud/docs/github) and [hosting guide](https://botkeep.cloud/docs/hosting). The panel's available runtime versions and capabilities are authoritative. Test `/start`, `/help`, `/reload`, and a short `/play` request in a test group before using it in a live group.
