@@ -43,6 +43,63 @@ def register_handlers(bot, calls, state):
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH)
         await calls.play(chat_id, media)
 
+    # Store group message metadata and text for owner-only search.
+    import sqlite3
+    DB_PATH = Path(os.getenv("ALEXA_DB_PATH", "alexa_music.sqlite3"))
+
+    def init_db():
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS members (group_id INTEGER, user_id INTEGER, username TEXT, display_name TEXT, last_seen INTEGER, PRIMARY KEY(group_id, user_id))")
+            db.execute("CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, user_id INTEGER, username TEXT, display_name TEXT, message_text TEXT, sent_at INTEGER)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id, sent_at)")
+            db.execute("CREATE TABLE IF NOT EXISTS known_groups (group_id INTEGER PRIMARY KEY, title TEXT, seen_at INTEGER)")
+    init_db()
+
+    @bot.on_message(filters.group & ~filters.service, group=5)
+    async def record_group_activity(_, m):
+        if not m.from_user:
+            return
+        group_id = m.chat.id
+        user = m.from_user
+        display_name = " ".join(x for x in [user.first_name, user.last_name] if x)[:128]
+        message_text = (m.text or m.caption or "")[:3500]
+        now = int(time.time())
+        try:
+            with sqlite3.connect(DB_PATH) as db:
+                db.execute("INSERT INTO members VALUES (?, ?, ?, ?, ?) ON CONFLICT(group_id, user_id) DO UPDATE SET username=excluded.username, display_name=excluded.display_name, last_seen=excluded.last_seen",
+                           (group_id, user.id, user.username or "", display_name, now))
+                db.execute("INSERT INTO known_groups VALUES (?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET title=excluded.title, seen_at=excluded.seen_at",
+                           (group_id, m.chat.title or str(group_id), now))
+                if message_text:
+                    db.execute("INSERT INTO group_messages(group_id,user_id,username,display_name,message_text,sent_at) VALUES(?,?,?,?,?,?)",
+                               (group_id, user.id, user.username or "", display_name, message_text, now))
+            if group_id not in state["groups"]:
+                state["groups"].append(group_id)
+            if user.id not in state["users"]:
+                state["users"].append(user.id)
+        except Exception:
+            logging.exception("Failed to record group activity")
+
+    @bot.on_message(filters.command("chatsearch") & owner)
+    async def owner_chat_search(_, m):
+        args = m.command[1:]
+        if len(args) < 2:
+            return await reply(m, "Usage: /chatsearch GROUP_ID search words")
+        try:
+            group_id = int(args[0])
+            term = " ".join(args[1:])[:200]
+            with sqlite3.connect(DB_PATH) as db:
+                rows = db.execute("SELECT display_name, username, user_id, message_text, sent_at FROM group_messages WHERE group_id=? AND message_text LIKE ? ORDER BY sent_at DESC LIMIT 10",
+                                  (group_id, "%" + term.replace("%", "\\%").replace("_", "\\_") + "%")).fetchall()
+            if not rows:
+                return await reply(m, "No matching stored messages found. Only messages received after recording was enabled can be searched.")
+            lines = [f"🔎 Results for group {group_id}:"]
+            for name, username, uid, body, sent_at in rows:
+                lines.append(f"{name} (@{username or 'none'}, ID {uid}) — {time.strftime('%Y-%m-%d %H:%M', time.localtime(sent_at))}\\n{body[:500]}")
+            await reply(m, "\\n\\n".join(lines)[:3900])
+        except Exception as e:
+            await reply(m, "Search failed: " + str(e)[:180])
+
     @bot.on_message(filters.command("start"))
     async def start(_, m):
         if m.from_user and m.from_user.id not in state["users"]:
