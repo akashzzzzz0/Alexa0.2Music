@@ -1,0 +1,18 @@
+services:
+  - type: worker
+    name: alexa-02-music
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SESSION_STRING
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: DURATION_LIMIT
+        value: "3600"
