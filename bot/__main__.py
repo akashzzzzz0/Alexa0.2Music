@@ -1,4 +1,4 @@
-import asyncio, logging, os
+import asyncio, logging, os, shutil
 from dotenv import load_dotenv
 from pyrogram import Client
 from pytgcalls import PyTgCalls
@@ -14,6 +14,9 @@ def need(key):
     return value
 
 async def main():
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("FFmpeg is missing. Use the repository Dockerfile or a host runtime that installs FFmpeg.")
+    logging.info("FFmpeg available: %s", shutil.which("ffmpeg"))
     api_id = int(need("API_ID"))
     api_hash = need("API_HASH")
     bot = Client("alexa_music_bot", api_id=api_id, api_hash=api_hash,
