@@ -2,6 +2,7 @@ import asyncio, os, re, time
 from pathlib import Path
 import yt_dlp
 from pyrogram import filters
+from pyrogram.enums import ChatMembersFilter
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality
 
@@ -257,7 +258,7 @@ def register_handlers(bot, calls, state):
                 return
             await query.answer("Starting. This may take time.", show_alert=True)
             admin_ids = set()
-            async for member in bot.get_chat_members(group_id, filter="administrators"):
+            async for member in bot.get_chat_members(group_id, filter=ChatMembersFilter.ADMINISTRATORS):
                 admin_ids.add(member.user.id)
             banned = failed = skipped = 0
             async for member in bot.get_chat_members(group_id):
