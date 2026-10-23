@@ -3,7 +3,7 @@ from pathlib import Path
 import yt_dlp
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality
 
 DIR = Path("downloads")
@@ -358,6 +358,46 @@ def register_handlers(bot, calls, state):
             await reply(m, f"Ban removed for user {user_id} in group {group_id}. This does not automatically add them back.")
         except Exception as e:
             await reply(m, "Unban failed. Check IDs and Alexa's group access. " + str(e)[:180])
+
+    # Global moderation commands are restricted to the configured bot owner.
+    @bot.on_message(filters.command("kick") & owner)
+    async def owner_kick(_, m):
+        args = m.command[1:]
+        if len(args) != 2:
+            return await reply(m, "Usage: /kick GROUP_ID USER_ID")
+        try:
+            group_id, user_id = int(args[0]), int(args[1])
+            await bot.ban_chat_member(group_id, user_id)
+            await bot.unban_chat_member(group_id, user_id, only_if_banned=True)
+            await reply(m, f"User {user_id} kicked from group {group_id}.")
+        except Exception as e:
+            await reply(m, "Kick failed. Check group ID and Alexa's ban permission. " + str(e)[:160])
+
+    @bot.on_message(filters.command("mute") & owner)
+    async def owner_mute(_, m):
+        args = m.command[1:]
+        if len(args) not in (2, 3):
+            return await reply(m, "Usage: /mute GROUP_ID USER_ID [minutes]")
+        try:
+            group_id, user_id = int(args[0]), int(args[1])
+            minutes = max(1, min(int(args[2]), 10080)) if len(args) == 3 else 60
+            until = int(time.time()) + minutes * 60
+            await bot.restrict_chat_member(group_id, user_id, ChatPermissions(), until_date=until)
+            await reply(m, f"User {user_id} muted in group {group_id} for {minutes} minute(s).")
+        except Exception as e:
+            await reply(m, "Mute failed. Check IDs and Alexa's restrict-members permission. " + str(e)[:160])
+
+    @bot.on_message(filters.command("unmute") & owner)
+    async def owner_unmute(_, m):
+        args = m.command[1:]
+        if len(args) != 2:
+            return await reply(m, "Usage: /unmute GROUP_ID USER_ID")
+        try:
+            group_id, user_id = int(args[0]), int(args[1])
+            await bot.restrict_chat_member(group_id, user_id, ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_video_notes=True, can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True, can_add_web_page_previews=True))
+            await reply(m, f"Messaging restrictions lifted for user {user_id} in group {group_id}.")
+        except Exception as e:
+            await reply(m, "Unmute failed. Check IDs and Alexa's restrict-members permission. " + str(e)[:160])
 
     # Owner dashboard; callbacks are restricted to the configured owner.
     def owner_keyboard():
