@@ -55,6 +55,7 @@ def register_handlers(bot, calls, state):
             db.execute("CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id, sent_at)")
             db.execute("CREATE TABLE IF NOT EXISTS known_groups (group_id INTEGER PRIMARY KEY, title TEXT, seen_at INTEGER)")
             db.execute("CREATE TABLE IF NOT EXISTS logging_settings (group_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, changed_by INTEGER, changed_at INTEGER)")
+            db.execute("CREATE TABLE IF NOT EXISTS authorized_users (group_id INTEGER NOT NULL, user_id INTEGER NOT NULL, authorized_by INTEGER, authorized_at INTEGER, PRIMARY KEY(group_id, user_id))")
     init_db()
 
     @bot.on_message(filters.group & ~filters.service, group=5)
@@ -147,6 +148,43 @@ def register_handlers(bot, calls, state):
     async def settings(_, m):
         await reply(m, "⚙️ Duration limit: " + str(state["duration_limit"]) + " seconds. All features are free.")
 
+    async def manage_auth(m, authorize):
+        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+            return await reply(m, "Use /auth or /unauth in the group.")
+        try:
+            member = await bot.get_chat_member(m.chat.id, m.from_user.id)
+            status = str(member.status).lower()
+            if m.from_user.id != state["owner_id"] and not (status.endswith("administrator") or status.endswith("owner")):
+                return await reply(m, "Only this group's admins/owner or the bot owner can manage authorized users.")
+            target = m.reply_to_message.from_user if m.reply_to_message and m.reply_to_message.from_user else None
+            if not target and len(m.command) > 1:
+                raw = m.command[1].lstrip("@")
+                if raw.isdigit():
+                    target = await bot.get_users(int(raw))
+                else:
+                    target = await bot.get_users(raw)
+            if not target:
+                return await reply(m, "Reply to a user's message with /auth or /unauth, or use /auth USER_ID.")
+            if target.is_bot:
+                return await reply(m, "Bot accounts cannot be authorized for music controls.")
+            import sqlite3
+            with sqlite3.connect(DB_PATH) as db:
+                if authorize:
+                    db.execute("INSERT OR REPLACE INTO authorized_users(group_id,user_id,authorized_by,authorized_at) VALUES(?,?,?,?)", (m.chat.id, target.id, m.from_user.id, int(time.time())))
+                else:
+                    db.execute("DELETE FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, target.id))
+            await reply(m, f"{'✅ Authorized' if authorize else '🚫 Authorization removed'}: {target.first_name} (ID {target.id}) in this group.")
+        except Exception as e:
+            await reply(m, "Could not update authorization: " + str(e)[:160])
+
+    @bot.on_message(filters.command("auth") & filters.group)
+    async def auth_user(_, m):
+        await manage_auth(m, True)
+
+    @bot.on_message(filters.command("unauth") & filters.group)
+    async def unauth_user(_, m):
+        await manage_auth(m, False)
+
     async def music_admin_only(m):
         # The configured bot owner has global access; otherwise only this group's
         # owner/admins can control playback.
@@ -160,7 +198,12 @@ def register_handlers(bot, calls, state):
             status = str(member.status).lower()
             if status.endswith("administrator") or status.endswith("owner"):
                 return True
-            await reply(m, "🎵 Music controls are available to this group's admins and owner only.")
+            import sqlite3
+            with sqlite3.connect(DB_PATH) as db:
+                row = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
+            if row:
+                return True
+            await reply(m, "🎵 Music controls are for group admins/owner and users authorized with /auth.")
             return False
         except Exception:
             await reply(m, "I couldn't verify your group admin status. Please try again.")
@@ -231,6 +274,49 @@ def register_handlers(bot, calls, state):
             await reply(m, "▶️ Resumed.")
         except Exception as e:
             await reply(m, "Resume failed: " + str(e)[:140])
+
+    # Group members can vote to skip; each user gets one vote per track.
+    VOTES = {}
+
+    @bot.on_message(filters.command("voteskip") & filters.group)
+    async def vote_skip(_, m):
+        cid = m.chat.id
+        if cid not in CURRENT:
+            return await reply(m, "Nothing is playing right now.")
+        VOTES[cid] = {"voters": set(), "message_id": None}
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Vote to skip (0/3)", callback_data=f"musicvote:{cid}")]])
+        msg = await reply(m, "🗳️ **Vote to skip this track**\\nThree different group members are needed. Group admins can use /skip directly.", reply_markup=kb)
+        VOTES[cid]["message_id"] = msg.id
+
+    @bot.on_callback_query(filters.regex(r"^musicvote:-?\\d+$"))
+    async def vote_skip_callback(_, q):
+        if not q.from_user:
+            return await q.answer("Cannot identify voter.", show_alert=True)
+        try:
+            cid = int(q.data.split(":", 1)[1])
+            vote = VOTES.get(cid)
+            if not vote or cid not in CURRENT:
+                return await q.answer("This vote is no longer active.", show_alert=True)
+            if q.from_user.id in vote["voters"]:
+                return await q.answer("You already voted.")
+            vote["voters"].add(q.from_user.id)
+            count = len(vote["voters"])
+            if count >= 3:
+                try:
+                    await calls.leave_call(cid)
+                    CURRENT.pop(cid, None)
+                    queue_items = QUEUES.get(cid, [])
+                    if queue_items:
+                        await start_item(cid, queue_items.pop(0))
+                    VOTES.pop(cid, None)
+                    await q.message.edit_text("⏭️ Vote passed! Track skipped.")
+                except Exception as e:
+                    await q.message.edit_text("Vote passed, but skipping failed: " + str(e)[:120])
+                return await q.answer("Vote passed!", show_alert=True)
+            await q.message.edit_reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton(f"⏭ Vote to skip ({count}/3)", callback_data=f"musicvote:{cid}")]]))
+            await q.answer("Vote counted.")
+        except Exception as e:
+            await q.answer("Vote failed: " + str(e)[:100], show_alert=True)
 
     @bot.on_message(filters.command("skip") & filters.group)
     async def skip(_, m):
