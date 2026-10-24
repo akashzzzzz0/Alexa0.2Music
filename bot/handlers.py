@@ -49,15 +49,20 @@ def register_handlers(bot, calls, state, user_client=None):
                     # handling. For YouTube song-name searches, immediately try SoundCloud.
                     if not video and query.startswith("ytsearch"):
                         search_term = query.split(":", 1)[1].strip()
-                        logging.warning("YouTube search itself failed; trying SoundCloud for %r: %s",
-                                        search_term, str(search_exc)[:200])
+                        logging.warning("YouTube search failed for %r: %s",
+                                        search_term, str(search_exc)[:500])
                         try:
                             return await fetch("scsearch5:" + search_term, False)
                         except Exception as fallback_exc:
-                            logging.warning("SoundCloud search fallback failed for %r: %s",
-                                            search_term, str(fallback_exc)[:200])
+                            logging.warning("SoundCloud search failed for %r: %s",
+                                            search_term, str(fallback_exc)[:500])
+                            raise RuntimeError(
+                                "Both search sources failed. YouTube: "
+                                + str(search_exc)[:170] + " | SoundCloud: "
+                                + str(fallback_exc)[:170]
+                            ) from fallback_exc
                     raise RuntimeError(
-                        "Search failed on YouTube and SoundCloud. Try adding the artist name or a direct supported audio URL."
+                        "Media search failed: " + str(search_exc)[:300]
                     ) from search_exc
                 if not entries:
                     if not video and query.startswith("ytsearch"):
@@ -66,8 +71,12 @@ def register_handlers(bot, calls, state, user_client=None):
                             return await fetch("scsearch5:" + search_term, False)
                         except Exception as fallback_exc:
                             logging.warning("SoundCloud had no playable search result for %r: %s",
-                                            search_term, str(fallback_exc)[:200])
-                    raise ValueError("No playable search results were found on the selected sources.")
+                                            search_term, str(fallback_exc)[:500])
+                            raise RuntimeError(
+                                "No YouTube results and SoundCloud failed: "
+                                + str(fallback_exc)[:250]
+                            ) from fallback_exc
+                    raise ValueError("No playable search results were found on the selected source.")
                 candidates = entries[:5]
             else:
                 candidates = [query]
