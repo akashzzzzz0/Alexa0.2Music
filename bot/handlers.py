@@ -602,6 +602,11 @@ def register_handlers(bot, calls, state, user_client=None):
                     await finish_player_ui(chat_id, old, "⏹ Playback stopped — queue is empty.")
                     if not already_answered:
                         await q.answer("No queued or related track found; playback stopped")
+                    else:
+                        await bot.send_message(
+                            chat_id,
+                            "🔁 Autoplay couldn't find a different related track. Try /play with the artist name."
+                        )
             elif action == "stop":
                 old = CURRENT.pop(chat_id, None)
                 QUEUES.pop(chat_id, None)
@@ -1292,6 +1297,8 @@ def register_handlers(bot, calls, state, user_client=None):
                     try:
                         queued_item = await fetch("ytsearch10:" + track_query, False)
                         if queued_item.get("duration", 0) <= state["duration_limit"]:
+                            queued_item["requested_query"] = track_query
+                            queued_item["autoplay_vibe"] = autoplay_vibe(queued_item)
                             if m.from_user:
                                 queued_item["requested_by_id"] = m.from_user.id
                                 queued_item["requested_by_name"] = m.from_user.first_name or "Group member"
