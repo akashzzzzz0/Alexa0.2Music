@@ -312,6 +312,7 @@ def register_handlers(bot, calls, state, user_client=None):
                             "tags": info.get("tags") or [],
                             "duration": int(info.get("duration") or 0),
                             "url": info.get("webpage_url") or info.get("original_url"),
+                            "thumbnail": info.get("thumbnail"),
                             "source": urllib.parse.urlparse(info.get("webpage_url") or info.get("original_url") or "").hostname or "Audio stream",
                             "path": path, "video": video}
                 except Exception as exc:
@@ -465,61 +466,61 @@ def register_handlers(bot, calls, state, user_client=None):
             lines.append(f"\n🎵 {len(queued)} track(s) waiting after the current song.")
         return "\n".join(lines)
 
-    async def refresh_player_queue(chat_id):
-        current = CURRENT.get(chat_id)
-        if current and current.get("player_message_id"):
-            try:
-                await bot.edit_message_text(
-                    chat_id, current["player_message_id"],
-                    player_text(current) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}",
-                    reply_markup=player_keyboard(chat_id))
-            except Exception:
-                logging.debug("Could not refresh player queue count in %s", chat_id)
-
     def player_keyboard(chat_id):
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("⏸ Pause", callback_data=f"musicctl:pause:{chat_id}"),
              InlineKeyboardButton("▶️ Resume", callback_data=f"musicctl:resume:{chat_id}")],
-            [InlineKeyboardButton("⏭ Skip", callback_data=f"musicctl:skip:{chat_id}"),
-             InlineKeyboardButton("🗳 Vote Skip", callback_data=f"musicvote:{chat_id}")],
             [InlineKeyboardButton("⏹ Stop", callback_data=f"musicctl:stop:{chat_id}")],
             [InlineKeyboardButton("🎶 Queue", callback_data=f"musicctl:queue:{chat_id}"),
              InlineKeyboardButton("🔁 Autoplay", callback_data=f"musicctl:autoplay:{chat_id}")],
             [InlineKeyboardButton("✖️ Close Player UI", callback_data=f"musicctl:close:{chat_id}")]
         ])
 
-    async def finish_player_ui(chat_id, item, note="✅ Track finished."):
-        """Mark the old player card as inactive without stopping playback."""
+    def player_caption(item):
+        return player_text(item) + f"\\n\\n📃 **Tracks waiting:** {len(QUEUES.get(item.get('chat_id'), []))}"
+
+    async def edit_player_ui(chat_id, item, text=None, reply_markup=None):
         message_id = (item or {}).get("player_message_id")
         if not message_id:
             return
+        content = text if text is not None else player_caption(item)
         try:
-            await bot.edit_message_text(chat_id, message_id, note, reply_markup=None)
+            if item.get("player_photo"):
+                await bot.edit_message_caption(chat_id, message_id, caption=content, reply_markup=reply_markup)
+            else:
+                await bot.edit_message_text(chat_id, message_id, content, reply_markup=reply_markup)
         except Exception:
-            logging.debug("Could not close old player card in %s", chat_id)
+            logging.debug("Could not edit player UI in %s", chat_id, exc_info=True)
+
+    async def refresh_player_queue(chat_id):
+        current = CURRENT.get(chat_id)
+        if current and current.get("player_message_id"):
+            await edit_player_ui(chat_id, current, reply_markup=player_keyboard(chat_id))
+
+    async def finish_player_ui(chat_id, item, note="✅ Track finished."):
+        if (item or {}).get("player_message_id"):
+            await edit_player_ui(chat_id, item, note, reply_markup=None)
 
     async def publish_player_ui(chat_id, item, previous=None, note="⏭️ Previous track skipped."):
-        """Give every newly started track its own player card."""
         if previous:
             await finish_player_ui(chat_id, previous, note)
-        sent = await bot.send_message(
-            chat_id,
-            player_text(item) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}",
-            reply_markup=player_keyboard(chat_id)
-        )
+        item["chat_id"] = chat_id
+        caption = player_caption(item)
+        sent = None
+        thumbnail = item.get("thumbnail")
+        if thumbnail and not item.get("video"):
+            try:
+                sent = await bot.send_photo(chat_id, photo=thumbnail, caption=caption,
+                                            reply_markup=player_keyboard(chat_id))
+                item["player_photo"] = True
+            except Exception:
+                logging.info("Track thumbnail unavailable; using text player card", exc_info=True)
+        if sent is None:
+            sent = await bot.send_message(chat_id, caption, reply_markup=player_keyboard(chat_id))
+            item["player_photo"] = False
         item["player_message_id"] = sent.id
 
-    async def start_item(chat_id, item):
-        await ensure_session_in_group(chat_id)
-        if item["video"]:
-            media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH,
-                                video_parameters=VideoQuality.HD_720p)
-        else:
-            media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH)
-        await calls.play(chat_id, media)
-        CURRENT[chat_id] = item
-
-    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|skip|stop|queue|autoplay|close):-?\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|stop|queue|autoplay|close):-?\\d+$"))
     async def music_player_controls(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify user.", show_alert=True)
@@ -569,47 +570,6 @@ def register_handlers(bot, calls, state, user_client=None):
                     await bot.send_message(chat_id, "⚠️ Resume failed: " + str(exc)[:140])
                     return
                 logging.info("Playback resumed from player UI in %s", chat_id)
-            elif action == "skip":
-                queued = QUEUES.get(chat_id, [])
-                old = CURRENT.get(chat_id)
-                if not old:
-                    return await q.answer("Nothing is playing.", show_alert=True)
-                VOTES.pop(chat_id, None)
-                nxt = queued.pop(0) if queued else None
-                already_answered = False
-                if nxt is None and AUTOPLAY.get(chat_id, False):
-                    await q.answer("Finding a related next track…")
-                    already_answered = True
-                    nxt = await find_autoplay_next(old)
-                if nxt:
-                    try:
-                        await calls.leave_call(chat_id)
-                        CURRENT.pop(chat_id, None)
-                        await start_item(chat_id, nxt)
-                        if old.get("path") and old.get("path") != nxt.get("path"):
-                            Path(old["path"]).unlink(missing_ok=True)
-                        await publish_player_ui(chat_id, nxt, old, "⏭️ Previous track skipped.")
-                        if not already_answered:
-                            await q.answer("Skipped to next track")
-                    except Exception as exc:
-                        logging.exception("Skip button could not start next track")
-                        if not already_answered:
-                            await q.answer("Next track failed: " + str(exc)[:100], show_alert=True)
-                        else:
-                            await bot.send_message(chat_id, "⚠️ Next track failed: " + str(exc)[:120])
-                else:
-                    await calls.leave_call(chat_id)
-                    CURRENT.pop(chat_id, None)
-                    if old.get("path"):
-                        Path(old["path"]).unlink(missing_ok=True)
-                    await finish_player_ui(chat_id, old, "⏹ Playback stopped — queue is empty.")
-                    if not already_answered:
-                        await q.answer("No queued or related track found; playback stopped")
-                    else:
-                        await bot.send_message(
-                            chat_id,
-                            "🔁 Autoplay couldn't find a different related track. Try /play with the artist name."
-                        )
             elif action == "stop":
                 old = CURRENT.pop(chat_id, None)
                 QUEUES.pop(chat_id, None)
@@ -617,10 +577,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 if old:
                     Path(old["path"]).unlink(missing_ok=True)
                 await q.answer("Playback stopped")
-                try:
-                    await q.message.edit_text("⏹ **Playback stopped and queue cleared.**")
-                except Exception:
-                    pass
+                await finish_player_ui(chat_id, old, "⏹ **Playback stopped and queue cleared.**")
             elif action == "queue":
                 await q.answer()
                 await q.message.reply_text(queue_text(chat_id))
@@ -629,8 +586,10 @@ def register_handlers(bot, calls, state, user_client=None):
                 await q.answer("Autoplay " + ("enabled" if AUTOPLAY[chat_id] else "disabled"))
                 current = CURRENT.get(chat_id)
                 if current and current.get("player_message_id"):
-                    await bot.edit_message_text(chat_id, current["player_message_id"],
-                        player_text(current) + "\n\n🔁 Autoplay: " + ("ON" if AUTOPLAY[chat_id] else "OFF"),
+                    await edit_player_ui(
+                        chat_id, current,
+                        player_text(current) + f"\\n\\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}"
+                        + "\\n\\n🔁 Autoplay: " + ("ON" if AUTOPLAY[chat_id] else "OFF"),
                         reply_markup=player_keyboard(chat_id))
         except Exception as exc:
             logging.exception("Music player button failed")
@@ -1279,6 +1238,10 @@ def register_handlers(bot, calls, state, user_client=None):
         if not raw_query:
             return await reply(m, "Give a song name, Spotify link, or supported media URL. Example: /play Arijit Singh Tum Hi Ho")
         status = await m.reply_text("🎧 **ALEXA MUSIC — SEARCHING**\n\n▁ ▂ ▃ ▄ ▅ ▆ ▇ █\n🔎 Finding the best playable match…")
+        try:
+            await m.delete()
+        except Exception:
+            logging.debug("Could not auto-delete /play command in %s", m.chat.id)
         animation_task = asyncio.create_task(animate_search(status, raw_query))
         try:
             spotify_items = await spotify_tracks(raw_query) if "spotify.com/" in raw_query or raw_query.startswith("spotify:") else None
@@ -1346,24 +1309,35 @@ def register_handlers(bot, calls, state, user_client=None):
                 requester_id = item.get("requested_by_id")
                 requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
                 playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
-                return await status.edit_text(f"➕ **Added to queue — position {position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
+                await status.edit_text(f"➕ **Added to queue — position {position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
+                async def delete_queue_notice():
+                    await asyncio.sleep(8)
+                    try:
+                        await status.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(delete_queue_notice())
+
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
                 if previous:
                     await finish_player_ui(chat_id, previous, "⏭️ Track replaced by /playforce.")
-            item["player_message_id"] = previous.get("player_message_id", status.id) if previous and not force else status.id
-            await start_item(chat_id, item)
             item["chat_id"] = chat_id
             if playlist_queue:
                 QUEUES.setdefault(chat_id, []).extend(playlist_queue)
+            await start_item(chat_id, item)
             state["plays"] += 1
             if previous and previous.get("path") != item.get("path"):
                 try:
                     Path(previous["path"]).unlink(missing_ok=True)
                 except OSError:
                     logging.exception("Could not remove replaced track")
-            await status.edit_text(player_text(item), reply_markup=player_keyboard(chat_id))
+            await publish_player_ui(chat_id, item, previous, "⏭️ Previous track replaced.")
+            try:
+                await status.delete()
+            except Exception:
+                pass
         except Exception as e:
             animation_task.cancel()
             try:
@@ -1610,13 +1584,43 @@ def register_handlers(bot, calls, state, user_client=None):
 
     @bot.on_message(filters.command("skip") & filters.group)
     async def skip(_, m):
-        # Group admins and users authorized with /auth can skip directly.
-        if not await music_admin_only(m):
+        if not m.from_user:
             return
         cid = m.chat.id
         old = CURRENT.get(cid)
         if not old:
             return await reply(m, "Nothing is playing right now.")
+        can_skip_directly = m.from_user.id == state["owner_id"]
+        if not can_skip_directly:
+            try:
+                member = await bot.get_chat_member(cid, m.from_user.id)
+                status = str(getattr(member, "status", "")).lower().rsplit(".", 1)[-1]
+                can_skip_directly = status in ("administrator", "owner")
+                if not can_skip_directly:
+                    with sqlite3.connect(DB_PATH) as db:
+                        can_skip_directly = db.execute(
+                            "SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?",
+                            (cid, m.from_user.id)
+                        ).fetchone() is not None
+            except Exception:
+                return await reply(m, "Could not verify your group permissions. Please try again.")
+        if not can_skip_directly:
+            vote = VOTES.get(cid)
+            if vote and vote.get("track_path") == old.get("path"):
+                return await reply(m, "🗳️ A vote is already active below. Tap its button to vote.")
+            msg = await bot.send_message(
+                cid,
+                f"🗳️ **Skip vote requested**\\nTrack: **{old.get('title', 'Now playing')}**\\n"
+                "Four different members must vote. Tap below to cast your vote.",
+                reply_markup=vote_keyboard(cid, 0)
+            )
+            VOTES[cid] = {
+                "voters": set(),
+                "message_id": msg.id,
+                "track_path": old.get("path"),
+                "track_title": old.get("title")
+            }
+            return
         VOTES.pop(cid, None)
         queued = QUEUES.get(cid, [])
         nxt = queued.pop(0) if queued else None
