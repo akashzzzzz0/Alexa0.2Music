@@ -1533,6 +1533,8 @@ def register_handlers(bot, calls, state, user_client=None):
             old = CURRENT.get(cid)
             next_items = QUEUES.get(cid, [])
             next_item = next_items.pop(0) if next_items else None
+            if next_item is None and AUTOPLAY.get(cid, False):
+                next_item = await find_autoplay_next(old)
             if next_item:
                 try:
                     await calls.leave_call(cid)
@@ -1610,7 +1612,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 return await reply(m, "🗳️ A vote is already active below. Tap its button to vote.")
             msg = await bot.send_message(
                 cid,
-                f"🗳️ **Skip vote requested**\nTrack: **{old.get('title', 'Now playing')}**\\n"
+                f"🗳️ **Skip vote requested**\nTrack: **{old.get('title', 'Now playing')}**\n"
                 "Four different members must vote. Tap below to cast your vote.",
                 reply_markup=vote_keyboard(cid, 0)
             )
