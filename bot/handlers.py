@@ -1334,6 +1334,8 @@ def register_handlers(bot, calls, state, user_client=None):
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
+                if previous:
+                    await finish_player_ui(chat_id, previous, "⏭️ Track replaced by /playforce.")
             item["player_message_id"] = previous.get("player_message_id", status.id) if previous and not force else status.id
             await start_item(chat_id, item)
             item["chat_id"] = chat_id
