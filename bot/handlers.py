@@ -1129,6 +1129,8 @@ def register_handlers(bot, calls, state, user_client=None):
             metadata = await asyncio.to_thread(get_oembed)
             title = str(metadata.get("title") or "").strip()
             artist = str(metadata.get("author_name") or "").strip()
+            if artist.casefold() in ("spotify", "spotify studios"):
+                artist = ""
             if not title:
                 raise ValueError("Spotify did not provide track details.")
             return [{"title": title, "artist": artist}]
