@@ -1052,7 +1052,7 @@ def register_handlers(bot, calls, state, user_client=None):
         Track links can use Spotify oEmbed without credentials. Playlists/albums need
         Spotify Web API client credentials configured as environment variables.
         """
-        match = re.search(r"(?:open\\.spotify\\.com/|spotify:)(track|playlist|album)[/:]([A-Za-z0-9]+)", url)
+        match = re.search(r"(?:open\.spotify\.com/|spotify:)(track|playlist|album)[/:]([A-Za-z0-9]+)", url)
         if not match:
             return None
         kind, spotify_id = match.group(1), match.group(2)
@@ -1181,6 +1181,26 @@ def register_handlers(bot, calls, state, user_client=None):
             # missing invite permissions are explained immediately.
             await ensure_session_in_group(m.chat.id)
             item = await fetch(query, video)
+            playlist_queue = []
+            # Spotify playlists/albums: resolve and queue up to 9 additional tracks.
+            # Keep the first track as the immediate playback item.
+            if spotify_items and len(spotify_items) > 1:
+                for track in spotify_items[1:10]:
+                    track_query = (track.get("title", "") + " " + track.get("artist", "")).strip()
+                    if not track_query:
+                        continue
+                    try:
+                        queued_item = await fetch("ytsearch10:" + track_query, False)
+                        if queued_item.get("duration", 0) <= state["duration_limit"]:
+                            if m.from_user:
+                                queued_item["requested_by_id"] = m.from_user.id
+                                queued_item["requested_by_name"] = m.from_user.first_name or "Group member"
+                            playlist_queue.append(queued_item)
+                        elif queued_item.get("path"):
+                            Path(queued_item["path"]).unlink(missing_ok=True)
+                    except Exception as playlist_exc:
+                        logging.warning("Spotify playlist track %r could not be matched: %s",
+                                        track_query, str(playlist_exc)[:180])
             animation_task.cancel()
             try:
                 await animation_task
@@ -1194,19 +1214,26 @@ def register_handlers(bot, calls, state, user_client=None):
                 item["requested_by_name"] = (m.from_user.first_name or "Group member")
             if item["duration"] > state["duration_limit"]:
                 Path(item["path"]).unlink(missing_ok=True)
+                for queued_item in playlist_queue:
+                    if queued_item.get("path"):
+                        Path(queued_item["path"]).unlink(missing_ok=True)
                 return await status.edit_text("This track exceeds the configured duration limit.")
             chat_id = m.chat.id
             if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
+                QUEUES[chat_id].extend(playlist_queue)
                 requester_name = str(item.get("requested_by_name") or "Group member").replace("[", "(").replace("]", ")")
                 requester_id = item.get("requested_by_id")
                 requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
-                return await status.edit_text("➕ Queued: **" + item["title"] + "**" + requested_by)
+                playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
+                return await status.edit_text("➕ Queued: **" + item["title"] + "**" + requested_by + playlist_note)
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
             item["player_message_id"] = previous.get("player_message_id", status.id) if previous and not force else status.id
             await start_item(chat_id, item)
+            if playlist_queue:
+                QUEUES.setdefault(chat_id, []).extend(playlist_queue)
             state["plays"] += 1
             if previous and previous.get("path") != item.get("path"):
                 try:
