@@ -443,6 +443,36 @@ def register_handlers(bot, calls, state, user_client=None):
                 f"━━━━━━━━━━━━━━━━━━\n"
                 "Use the controls below to manage playback.")
 
+    def queue_text(chat_id):
+        """Display the active track first, then queued tracks in playback order."""
+        current = CURRENT.get(chat_id)
+        queued = QUEUES.get(chat_id, [])
+        lines = ["🎶 **ALEXA PLAYBACK QUEUE**"]
+        if current:
+            lines.append(f"▶️ **1. NOW PLAYING:** {current.get('title', 'Unknown track')}")
+            start = 2
+        else:
+            start = 1
+        if queued:
+            lines.extend(f"⏳ **{i}.** {item.get('title', 'Unknown track')}"
+                         for i, item in enumerate(queued, start) if i <= 30)
+        elif not current:
+            lines.append("Queue is empty.")
+        if current:
+            lines.append(f"\n🎵 {len(queued)} track(s) waiting after the current song.")
+        return "\n".join(lines)
+
+    async def refresh_player_queue(chat_id):
+        current = CURRENT.get(chat_id)
+        if current and current.get("player_message_id"):
+            try:
+                await bot.edit_message_text(
+                    chat_id, current["player_message_id"],
+                    player_text(current) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}",
+                    reply_markup=player_keyboard(chat_id))
+            except Exception:
+                logging.debug("Could not refresh player queue count in %s", chat_id)
+
     def player_keyboard(chat_id):
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("⏸ Pause", callback_data=f"musicctl:pause:{chat_id}"),
@@ -529,12 +559,8 @@ def register_handlers(bot, calls, state, user_client=None):
                 except Exception:
                     pass
             elif action == "queue":
-                queue = QUEUES.get(chat_id, [])
-                lines = ["🎵 **UP NEXT**"] + [
-                    f"{i}. {item.get('title', 'Unknown')}" for i, item in enumerate(queue[:15], 1)
-                ]
                 await q.answer()
-                await q.message.reply_text("\n".join(lines) if queue else "🎶 Queue is empty.")
+                await q.message.reply_text(queue_text(chat_id))
             elif action == "autoplay":
                 AUTOPLAY[chat_id] = not AUTOPLAY.get(chat_id, False)
                 await q.answer("Autoplay " + ("enabled" if AUTOPLAY[chat_id] else "disabled"))
@@ -1224,16 +1250,19 @@ def register_handlers(bot, calls, state, user_client=None):
             if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
                 QUEUES[chat_id].extend(playlist_queue)
+                position = 1 + (1 if CURRENT.get(chat_id) else 0) + len(QUEUES[chat_id]) - len(playlist_queue) - 1
+                await refresh_player_queue(chat_id)
                 requester_name = str(item.get("requested_by_name") or "Group member").replace("[", "(").replace("]", ")")
                 requester_id = item.get("requested_by_id")
                 requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
                 playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
-                return await status.edit_text("➕ Queued: **" + item["title"] + "**" + requested_by + playlist_note)
+                return await status.edit_text(f"➕ **Added to queue — position {position + 1 if CURRENT.get(chat_id) else position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
             item["player_message_id"] = previous.get("player_message_id", status.id) if previous and not force else status.id
             await start_item(chat_id, item)
+            item["chat_id"] = chat_id
             if playlist_queue:
                 QUEUES.setdefault(chat_id, []).extend(playlist_queue)
             state["plays"] += 1
@@ -1321,11 +1350,7 @@ def register_handlers(bot, calls, state, user_client=None):
     async def queue(_, m):
         if not await music_admin_only(m):
             return
-        items = QUEUES.get(m.chat.id, [])
-        current = CURRENT.get(m.chat.id)
-        lines = ["🎶 Now: " + current["title"] if current else "Nothing is playing."]
-        lines += [str(i) + ". " + x["title"] for i, x in enumerate(items, 1)]
-        await reply(m, "\n".join(lines[:25]))
+        await reply(m, queue_text(m.chat.id))
 
     @bot.on_message(filters.command("pause") & filters.private)
     async def pause_private(_, m):
