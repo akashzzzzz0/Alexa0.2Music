@@ -579,6 +579,7 @@ def register_handlers(bot, calls, state, user_client=None):
         if not in_group:
             general = ("🎧 **ALEXA MUSIC — COMMANDS**\n"
                        "/play SONG — Search and play music in a group\n"
+                       "/playforce SONG — Replace the current track\n"
                        "/vplay URL — Play video in a group\n"
                        "/queue — Show the queue\n/autoplay on|off — Toggle autoplay\n"
                        "/pause • /resume • /skip • /stop — Playback controls\n"
@@ -603,7 +604,7 @@ def register_handlers(bot, calls, state, user_client=None):
             status = str(getattr(member.status, "value", member.status)).lower().rsplit(".", 1)[-1]
             if status.endswith("administrator") or status.endswith("owner"):
                 return ("🎧 **GROUP ADMIN / GC OWNER COMMANDS**\n"
-                        "/play SONG — Search and play music\n/vplay URL — Play video\n"
+                        "/play SONG — Search and play music\n/playforce SONG — Replace current track\n/vplay URL — Play video\n"
                         "/queue — Show queue\n/autoplay on|off — Toggle autoplay\n"
                         "/pause • /resume • /skip • /stop — Playback controls\n"
                         "/auth USER_ID (or reply) • /unauth USER_ID (or reply)\n"
