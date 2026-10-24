@@ -39,7 +39,7 @@ def register_handlers(bot, calls, state):
             # Resolve search results first, then download one candidate at a time.
             # If a result is unavailable, try the next result rather than failing
             # the entire /play request on the first blocked or removed video.
-            search_mode = query.startswith("ytsearch")
+            search_mode = query.startswith(("ytsearch", "scsearch"))
             if search_mode:
                 search_info = await asyncio.to_thread(ydl.extract_info, query, download=False)
                 entries = [x for x in (search_info or {}).get("entries", []) if x]
@@ -82,8 +82,19 @@ def register_handlers(bot, calls, state):
                                 logging.exception("Could not remove partial download %s", partial)
             if failures:
                 combined = " ".join(failures).lower()
+                # If YouTube blocks a searched music result, try a separate supported
+                # source instead of attempting to bypass YouTube's verification.
+                if (not video and query.startswith("ytsearch")
+                        and ("sign in to confirm" in combined or "not a bot" in combined)):
+                    search_term = query.split(":", 1)[1]
+                    logging.warning("YouTube verification blocked search; trying SoundCloud search fallback")
+                    try:
+                        return await fetch("scsearch5:" + search_term, video)
+                    except Exception as fallback_exc:
+                        logging.warning("Alternate music-source fallback failed: %s", str(fallback_exc)[:200])
+                    raise RuntimeError("YouTube is requiring verification and the alternate music source could not provide this track. Try another song or a direct audio URL. This is a source restriction, not an FFmpeg error.")
                 if "sign in to confirm" in combined or "not a bot" in combined:
-                    raise RuntimeError("YouTube is temporarily requiring verification for these results. Please try another song or a direct audio URL; this is a YouTube restriction, not an FFmpeg error.")
+                    raise RuntimeError("YouTube is requiring verification for this URL. Try another source or a direct audio URL. This is a YouTube restriction, not an FFmpeg error.")
                 raise RuntimeError("Could not download any of the first search results. Try a different song title or URL.")
             raise ValueError("No playable result found.")
 
