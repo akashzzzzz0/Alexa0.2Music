@@ -315,32 +315,45 @@ def register_handlers(bot, calls, state):
                        "🗳️ Community vote-to-skip • Group permissions\n\n"
                        "➕ Add Alexa to your group, start a voice chat, and enjoy!")
             markup = start_keyboard(me.username or "")
+            photo_sent = False
+
+            # 1) Configured image URL, if provided.
             photo_url = os.getenv("START_IMAGE_URL", "").strip()
-            # Prefer an explicitly configured image; otherwise use Alexa's own profile photo.
             if photo_url:
                 try:
                     await bot.send_photo(m.chat.id, photo=photo_url, caption=caption, reply_markup=markup)
-                    return
+                    photo_sent = True
                 except Exception:
-                    logging.exception("START_IMAGE_URL failed; trying Alexa's profile photo")
-            try:
-                profile_photo_id = getattr(getattr(me, "photo", None), "big_file_id", None)
-                if not profile_photo_id:
-                    try:
-                        self_chat = await bot.get_chat(me.id)
-                        profile_photo_id = getattr(getattr(self_chat, "photo", None), "big_file_id", None)
-                    except Exception:
-                        logging.exception("Could not retrieve Alexa's profile photo")
-                if profile_photo_id:
-                    await bot.send_photo(m.chat.id, photo=profile_photo_id, caption=caption, reply_markup=markup)
-                    return
-            except Exception:
-                logging.exception("Alexa profile photo send failed; falling back to text")
-            await reply(m, caption, reply_markup=markup)
+                    logging.exception("START_IMAGE_URL failed; trying bot profile photo")
+
+            # 2) Try retrieving the bot's actual current profile photo from Telegram.
+            if not photo_sent:
+                try:
+                    async for profile_photo in bot.get_chat_photos(me.id, limit=1):
+                        await bot.send_photo(
+                            m.chat.id,
+                            photo=profile_photo.file_id,
+                            caption=caption,
+                            reply_markup=markup
+                        )
+                        photo_sent = True
+                        break
+                except Exception:
+                    logging.exception("Could not send Alexa profile photo from get_chat_photos")
+
+            # 3) Always show the complete welcome and buttons even if Telegram exposes no photo.
+            if not photo_sent:
+                await reply(m, caption, reply_markup=markup)
         except Exception:
             logging.exception("Start command failed in chat %s", getattr(m.chat, "id", "unknown"))
             try:
-                await reply(m, "🎧 Alexa Music is online. Use /help to see commands.")
+                # Keep the welcome buttons available even if another part of the start flow fails.
+                me = await bot.get_me()
+                await reply(
+                    m,
+                    "🎧 **ALEXA 0.2 MUSIC**\\nWelcome! Add Alexa to a group, start a voice chat, and use /play SONG.\\n\\nUse /help for commands.",
+                    reply_markup=start_keyboard(me.username or "")
+                )
             except Exception:
                 logging.exception("Could not send /start fallback response")
 
