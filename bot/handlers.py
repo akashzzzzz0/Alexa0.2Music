@@ -477,7 +477,7 @@ def register_handlers(bot, calls, state, user_client=None):
         ])
 
     def player_caption(item):
-        return player_text(item) + f"\\n\\n📃 **Tracks waiting:** {len(QUEUES.get(item.get('chat_id'), []))}"
+        return player_text(item) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(item.get('chat_id'), []))}"
 
     async def edit_player_ui(chat_id, item, text=None, reply_markup=None):
         message_id = (item or {}).get("player_message_id")
@@ -520,7 +520,7 @@ def register_handlers(bot, calls, state, user_client=None):
             item["player_photo"] = False
         item["player_message_id"] = sent.id
 
-    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|stop|queue|autoplay|close):-?\\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|stop|queue|autoplay|close):-?\d+$"))
     async def music_player_controls(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify user.", show_alert=True)
@@ -588,8 +588,8 @@ def register_handlers(bot, calls, state, user_client=None):
                 if current and current.get("player_message_id"):
                     await edit_player_ui(
                         chat_id, current,
-                        player_text(current) + f"\\n\\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}"
-                        + "\\n\\n🔁 Autoplay: " + ("ON" if AUTOPLAY[chat_id] else "OFF"),
+                        player_text(current) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}"
+                        + "\n\n🔁 Autoplay: " + ("ON" if AUTOPLAY[chat_id] else "OFF"),
                         reply_markup=player_keyboard(chat_id))
         except Exception as exc:
             logging.exception("Music player button failed")
@@ -1309,7 +1309,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 requester_id = item.get("requested_by_id")
                 requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
                 playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
-                await status.edit_text(f"➕ **Added to queue — position {position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
+                await status.edit_text(f"➕ **Added to queue — position {position}**\n🎵 {item['title']}" + requested_by + playlist_note)
                 async def delete_queue_notice():
                     await asyncio.sleep(8)
                     try:
@@ -1488,7 +1488,7 @@ def register_handlers(bot, calls, state, user_client=None):
         else:
             await reply(m, "🗳️ A skip vote is already active for this track. Use its Vote to skip button.")
 
-    @bot.on_callback_query(filters.regex(r"^musicvote:-?\\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicvote:-?\d+$"))
     async def vote_skip_callback(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify voter.", show_alert=True)
@@ -1610,7 +1610,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 return await reply(m, "🗳️ A vote is already active below. Tap its button to vote.")
             msg = await bot.send_message(
                 cid,
-                f"🗳️ **Skip vote requested**\\nTrack: **{old.get('title', 'Now playing')}**\\n"
+                f"🗳️ **Skip vote requested**\nTrack: **{old.get('title', 'Now playing')}**\\n"
                 "Four different members must vote. Tap below to cast your vote.",
                 reply_markup=vote_keyboard(cid, 0)
             )
