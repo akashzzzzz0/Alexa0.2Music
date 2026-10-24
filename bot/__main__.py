@@ -100,7 +100,7 @@ async def main():
     calls = PyTgCalls(user)
     state = {"owner_id": int(need("OWNER_ID")), "duration_limit": int(os.getenv("DURATION_LIMIT", "3600")),
              "users": [], "groups": [], "plays": 0, "started_at": time.time()}
-    register_handlers(bot, calls, state)
+    register_handlers(bot, calls, state, user)
     await bot.start()
     try:
         await configure_command_menus(bot, state["owner_id"])
