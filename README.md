@@ -1,6 +1,8 @@
-# ALEXA 0.2 Music
+# ALEXA MUSIC V3.0.0 — Ultimate Music Edition
 
 Free Telegram group voice-chat music bot. No paid plans or payment system.
+
+Current release: **V3.0.0**. Use `/version` to see the release and `/health` to check runtime diagnostics. V3 adds visible version metadata, health reporting (FFmpeg, active chats, queue, autoplay and uptime), and versioned startup notifications. These diagnostics do not replace real-host playback testing.
 
 ## Setup
 Set BOT_TOKEN, API_ID, API_HASH, SESSION_STRING and OWNER_ID as environment variables. Never commit credentials.
