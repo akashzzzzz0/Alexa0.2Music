@@ -946,7 +946,10 @@ def register_handlers(bot, calls, state, user_client=None):
             chat_id = m.chat.id
             if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
-                return await status.edit_text("➕ Queued: **" + item["title"] + "**")
+                requester_name = str(item.get("requested_by_name") or "Group member").replace("[", "(").replace("]", ")")
+                requester_id = item.get("requested_by_id")
+                requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
+                return await status.edit_text("➕ Queued: **" + item["title"] + "**" + requested_by)
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
@@ -1112,6 +1115,8 @@ def register_handlers(bot, calls, state, user_client=None):
     async def vote_skip_callback(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify voter.", show_alert=True)
+        if getattr(q.from_user, "is_bot", False):
+            return await q.answer("Only human group members can vote.", show_alert=True)
         try:
             cid = int(q.data.split(":", 1)[1])
             current = CURRENT.get(cid)
