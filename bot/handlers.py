@@ -1,4 +1,4 @@
-import asyncio, logging, os, re, time, shutil, urllib.request, urllib.parse, html
+import asyncio, logging, os, re, time, shutil, urllib.request, urllib.parse, html, difflib
 from bot.version import VERSION, RELEASE_NAME
 from pathlib import Path
 import yt_dlp
@@ -134,6 +134,61 @@ def register_handlers(bot, calls, state, user_client=None):
         raise RuntimeError("Internet Archive had no playable audio match." +
                            ((" " + " | ".join(failures[:2])) if failures else ""))
 
+    async def jiosaavn_fallback(search_term):
+        """Search JioSaavn's public catalog for Indian-language and lyric-based song queries."""
+        api_url = "https://saavn.dev/api/search/songs?" + urllib.parse.urlencode({
+            "query": search_term, "limit": 8
+        })
+        def search_saavn():
+            request = urllib.request.Request(
+                api_url, headers={"User-Agent": "Mozilla/5.0 (compatible; AlexaMusic/1.0)"}
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                payload = __import__("json").loads(response.read(1_500_000).decode("utf-8", "ignore"))
+            data = payload.get("data", {}) if isinstance(payload, dict) else {}
+            results = data.get("results", []) if isinstance(data, dict) else []
+            return results if isinstance(results, list) else []
+        try:
+            results = await asyncio.to_thread(search_saavn)
+        except Exception as exc:
+            raise RuntimeError("JioSaavn search unavailable: " + str(exc)[:120]) from exc
+        wanted = set(re.findall(r"[a-z0-9]+", search_term.lower()))
+        def score(track):
+            title = str(track.get("name") or track.get("title") or "").lower()
+            artists = track.get("artists") or {}
+            artist_text = " ".join(
+                str(x.get("name") or "") for key in ("primary", "featured", "all")
+                for x in (artists.get(key, []) if isinstance(artists, dict) else [])
+                if isinstance(x, dict)
+            )
+            words = set(re.findall(r"[a-z0-9]+", title + " " + artist_text.lower()))
+            overlap = len(wanted & words) / max(1, len(wanted))
+            ratio = difflib.SequenceMatcher(None, search_term.lower(), title).ratio()
+            return overlap * 0.75 + ratio * 0.25
+        results.sort(key=score, reverse=True)
+        failures = []
+        for track in results[:8]:
+            urls = track.get("downloadUrl") or track.get("download_url") or []
+            if isinstance(urls, dict):
+                urls = list(urls.values())
+            urls = sorted(
+                [x for x in urls if isinstance(x, dict) and x.get("url")],
+                key=lambda x: int(re.sub(r"\\D", "", str(x.get("quality") or "0")) or 0),
+                reverse=True
+            )
+            for entry in urls[:3]:
+                try:
+                    item = await fetch(entry["url"], False)
+                    item["title"] = track.get("name") or track.get("title") or item.get("title")
+                    album = track.get("album") or {}
+                    item["artist"] = item.get("artist") or (album.get("name") if isinstance(album, dict) else None)
+                    item["source"] = "JioSaavn"
+                    return item
+                except Exception as exc:
+                    failures.append(str(exc)[:100])
+        raise RuntimeError("JioSaavn had no playable match." +
+                           ((" " + " | ".join(failures[:2])) if failures else ""))
+
     async def fetch(query, video):
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
@@ -147,7 +202,7 @@ def register_handlers(bot, calls, state, user_client=None):
             # Resolve search results first, then download one candidate at a time.
             # If a result is unavailable, try the next result rather than failing
             # the entire /play request on the first blocked or removed video.
-            search_mode = query.startswith(("ytsearch", "scsearch"))
+            search_mode = query.startswith(("ytsearch", "scsearch", "ytmsearch"))
             if search_mode:
                 try:
                     search_info = await asyncio.to_thread(ydl.extract_info, query, download=False)
@@ -169,7 +224,8 @@ def register_handlers(bot, calls, state, user_client=None):
                             except Exception as bandcamp_exc:
                                 logging.warning("Bandcamp search failed for %r: %s",
                                                 search_term, str(bandcamp_exc)[:300])
-                            for source_name, source_search in (("Audius", audius_fallback),
+                            for source_name, source_search in (("JioSaavn", jiosaavn_fallback),
+                                                               ("Audius", audius_fallback),
                                                                ("Internet Archive", internet_archive_fallback)):
                                 try:
                                     return await source_search(search_term)
@@ -177,7 +233,7 @@ def register_handlers(bot, calls, state, user_client=None):
                                     logging.warning("%s search failed for %r: %s",
                                                     source_name, search_term, str(source_exc)[:220])
                             raise RuntimeError(
-                                "YouTube, SoundCloud, Bandcamp, Audius and Internet Archive had no playable match. "
+                                "YouTube, SoundCloud, JioSaavn, Bandcamp, Audius and Internet Archive had no playable match. "
                                 "Try adding the artist name or a supported direct track URL."
                             ) from bandcamp_exc
                     raise RuntimeError(
@@ -215,12 +271,18 @@ def register_handlers(bot, calls, state, user_client=None):
                     wanted = set(re.findall(r"[a-z0-9]+", search_term))
                     def candidate_score(candidate):
                         title = str(candidate.get("title") or "").lower()
-                        words = set(re.findall(r"[a-z0-9]+", title))
+                        artist = str(candidate.get("artist") or candidate.get("uploader") or candidate.get("channel") or "").lower()
+                        combined = title + " " + artist
+                        words = set(re.findall(r"[a-z0-9]+", combined))
                         if not wanted:
                             return 0.0
-                        return len(wanted & words) / len(wanted)
+                        overlap = len(wanted & words) / len(wanted)
+                        phrase = difflib.SequenceMatcher(None, search_term, title).ratio()
+                        # Favor matching all distinctive words, but tolerate lyric phrases
+                        # that do not exactly match the official track title.
+                        return overlap * 0.8 + phrase * 0.2
                     entries.sort(key=candidate_score, reverse=True)
-                candidates = entries[:5]
+                candidates = entries[:10]
             else:
                 candidates = [query]
 
@@ -274,7 +336,8 @@ def register_handlers(bot, calls, state, user_client=None):
                         return await bandcamp_fallback(search_term)
                     except Exception as bandcamp_exc:
                         logging.warning("Bandcamp fallback failed for %r: %s", search_term, str(bandcamp_exc)[:200])
-                    for source_name, source_search in (("Audius", audius_fallback),
+                    for source_name, source_search in (("JioSaavn", jiosaavn_fallback),
+                                                       ("Audius", audius_fallback),
                                                        ("Internet Archive", internet_archive_fallback)):
                         try:
                             return await source_search(search_term)
@@ -283,7 +346,7 @@ def register_handlers(bot, calls, state, user_client=None):
                                             source_name, search_term, str(source_exc)[:200])
                     if "sign in to confirm" in combined or "not a bot" in combined:
                         raise RuntimeError("YouTube requires verification on this host, and SoundCloud, Bandcamp, Audius and Internet Archive had no playable match. Try a more specific title or a supported direct track URL.")
-                    raise RuntimeError("No playable match was found on YouTube, SoundCloud, Bandcamp, Audius or Internet Archive. Try adding the artist name or use a supported direct track URL.")
+                    raise RuntimeError("No playable match was found on YouTube, SoundCloud, JioSaavn, Bandcamp, Audius or Internet Archive. Try adding the artist name or use a supported direct track URL.")
                 if "sign in to confirm" in combined or "not a bot" in combined:
                     raise RuntimeError("YouTube is requiring verification for this URL. Try another supported source or a direct audio URL.")
                 raise RuntimeError("Could not download this track. Try a more specific song title or a supported direct URL.")
@@ -496,13 +559,13 @@ def register_handlers(bot, calls, state, user_client=None):
         queries = []
         if artist:
             queries.extend([
-                f"ytsearch8:{artist} similar songs",
-                f"ytsearch8:{artist} {title} related tracks",
+                f"ytsearch10:{artist} similar songs",
+                f"ytsearch10:{artist} {title} related tracks",
                 f"scsearch8:{artist} similar songs",
             ])
         queries.extend([
-            f"ytsearch8:{title} similar songs",
-            f"ytsearch8:{title} music mix",
+            f"ytsearch10:{title} similar songs",
+            f"ytsearch10:{title} music mix",
             f"scsearch8:{title} similar songs",
         ])
         seen_titles = {title.casefold()}
@@ -992,7 +1055,7 @@ def register_handlers(bot, calls, state, user_client=None):
         if not query:
             return await reply(m, "Give a song name or URL. Example: /play lo-fi music")
         if not re.match(r"^https?://", query):
-            query = "ytsearch5:" + query
+            query = "ytsearch10:" + query
         status = await m.reply_text("🔎 Preparing media…")
         try:
             # Check the session assistant's group access before downloading audio, so
