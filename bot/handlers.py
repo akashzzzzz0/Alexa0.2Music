@@ -1402,7 +1402,7 @@ def register_handlers(bot, calls, state, user_client=None):
         if not old:
             return await reply(m, "Nothing is playing right now.")
         queued = QUEUES.get(cid, [])
-        VOTES.pop(cid, None) if "VOTES" in locals() else None
+        VOTES.pop(cid, None)
         if not queued:
             try:
                 await calls.leave_call(cid)
