@@ -1046,22 +1046,149 @@ def register_handlers(bot, calls, state, user_client=None):
             await reply(m, "I couldn't verify your group admin status. Please try again.")
             return False
 
+    async def spotify_tracks(url):
+        """Resolve a Spotify track/album/playlist URL to searchable track metadata.
+        Spotify audio itself is not streamed; matching playable audio is found via yt-dlp.
+        Track links can use Spotify oEmbed without credentials. Playlists/albums need
+        Spotify Web API client credentials configured as environment variables.
+        """
+        match = re.search(r"(?:open\\.spotify\\.com/|spotify:)(track|playlist|album)[/:]([A-Za-z0-9]+)", url)
+        if not match:
+            return None
+        kind, spotify_id = match.group(1), match.group(2)
+        client_id = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
+        client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
+
+        def spotify_api_tracks():
+            import base64, json
+            credentials = base64.b64encode((client_id + ":" + client_secret).encode()).decode()
+            token_req = urllib.request.Request(
+                "https://accounts.spotify.com/api/token",
+                data=urllib.parse.urlencode({"grant_type": "client_credentials"}).encode(),
+                headers={"Authorization": "Basic " + credentials,
+                         "Content-Type": "application/x-www-form-urlencoded",
+                         "User-Agent": "AlexaMusic/1.0"},
+                method="POST")
+            with urllib.request.urlopen(token_req, timeout=12) as response:
+                token = json.loads(response.read(100_000).decode()).get("access_token")
+            if not token:
+                raise RuntimeError("Spotify did not return an API access token.")
+            if kind == "track":
+                endpoint = "https://api.spotify.com/v1/tracks/" + spotify_id
+            elif kind == "album":
+                endpoint = "https://api.spotify.com/v1/albums/" + spotify_id + "/tracks?limit=50"
+            else:
+                endpoint = "https://api.spotify.com/v1/playlists/" + spotify_id + "/tracks?limit=100"
+            results = []
+            while endpoint and len(results) < 30:
+                req = urllib.request.Request(endpoint, headers={
+                    "Authorization": "Bearer " + token, "User-Agent": "AlexaMusic/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    payload = json.loads(response.read(1_000_000).decode("utf-8", "ignore"))
+                if kind == "track":
+                    tracks = [payload]
+                    endpoint = None
+                else:
+                    tracks = [row.get("track") for row in payload.get("items", [])
+                              if isinstance(row, dict) and row.get("track")]
+                    endpoint = payload.get("next")
+                for track in tracks:
+                    if not isinstance(track, dict) or not track.get("name"):
+                        continue
+                    artists = ", ".join(a.get("name", "") for a in track.get("artists", [])
+                                        if isinstance(a, dict) and a.get("name"))
+                    if track.get("is_playable", True):
+                        results.append({"title": track["name"], "artist": artists})
+                        if len(results) >= 30:
+                            break
+            return results
+
+        if client_id and client_secret:
+            try:
+                tracks = await asyncio.to_thread(spotify_api_tracks)
+                if tracks:
+                    return tracks
+            except Exception as exc:
+                logging.warning("Spotify API metadata lookup failed: %s", str(exc)[:200])
+                if kind != "track":
+                    raise RuntimeError(
+                        "Spotify playlist/album lookup failed. Check SPOTIFY_CLIENT_ID and "
+                        "SPOTIFY_CLIENT_SECRET in the host environment.") from exc
+        if kind != "track":
+            raise RuntimeError(
+                "Spotify playlist/album links need SPOTIFY_CLIENT_ID and "
+                "SPOTIFY_CLIENT_SECRET in the hosting environment. Spotify audio itself "
+                "cannot be streamed directly; Alexa searches playable versions of the tracks.")
+        try:
+            import json
+            oembed_url = "https://open.spotify.com/oembed?url=" + urllib.parse.quote(url, safe="")
+            req = urllib.request.Request(oembed_url, headers={"User-Agent": "AlexaMusic/1.0"})
+            def get_oembed():
+                with urllib.request.urlopen(req, timeout=12) as response:
+                    return json.loads(response.read(200_000).decode("utf-8", "ignore"))
+            metadata = await asyncio.to_thread(get_oembed)
+            title = str(metadata.get("title") or "").strip()
+            artist = str(metadata.get("author_name") or "").strip()
+            if not title:
+                raise ValueError("Spotify did not provide track details.")
+            return [{"title": title, "artist": artist}]
+        except Exception as exc:
+            raise RuntimeError("Could not read this Spotify track link: " + str(exc)[:140]) from exc
+
+    async def animate_search(status, label):
+        """Show a lightweight animated music equalizer while a request is resolving."""
+        frames = ["▁ ▂ ▃ ▄ ▅ ▆ ▇ █", "▂ ▄ ▆ █ ▇ ▅ ▃ ▁",
+                  "▃ ▆ ▂ ▇ ▄ █ ▁ ▅", "█ ▇ ▅ ▃ ▂ ▁ ▄ ▆"]
+        index = 0
+        safe_label = str(label).replace("<", "‹").replace(">", "›")[:90]
+        try:
+            while True:
+                await status.edit_text(
+                    "🎧 **ALEXA MUSIC — SEARCHING**\n\n"
+                    + frames[index % len(frames)] + "\n"
+                    + "🔎 Finding the best playable match…\n"
+                    + "🎵 " + safe_label)
+                index += 1
+                await asyncio.sleep(1.4)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Animation is cosmetic; a Telegram edit failure must not stop playback.
+            return
+
     async def request(m, video, force=False):
         if not is_group_chat(m):
             return await reply(m, "Use this command in a group.")
         if m.chat.id not in state["groups"]:
             state["groups"].append(m.chat.id)
-        query = " ".join(m.command[1:]).strip()
-        if not query:
-            return await reply(m, "Give a song name or URL. Example: /play lo-fi music")
-        if not re.match(r"^https?://", query):
-            query = "ytsearch10:" + query
-        status = await m.reply_text("🔎 Preparing media…")
+        raw_query = " ".join(m.command[1:]).strip()
+        if not raw_query:
+            return await reply(m, "Give a song name, Spotify link, or supported media URL. Example: /play Arijit Singh Tum Hi Ho")
+        status = await m.reply_text("🎧 **ALEXA MUSIC — SEARCHING**\n\n▁ ▂ ▃ ▄ ▅ ▆ ▇ █\n🔎 Finding the best playable match…")
+        animation_task = asyncio.create_task(animate_search(status, raw_query))
         try:
+            spotify_items = await spotify_tracks(raw_query) if "spotify.com/" in raw_query or raw_query.startswith("spotify:") else None
+            if spotify_items:
+                if video:
+                    raise RuntimeError("Spotify links are supported for audio playback with /play, not /vplay.")
+                raw_query = spotify_items[0]["title"] + " " + spotify_items[0].get("artist", "")
+                query = "ytsearch10:" + raw_query
+            else:
+                query = raw_query
+                if not re.match(r"^https?://", query):
+                    query = "ytsearch10:" + query
             # Check the session assistant's group access before downloading audio, so
             # missing invite permissions are explained immediately.
             await ensure_session_in_group(m.chat.id)
             item = await fetch(query, video)
+            animation_task.cancel()
+            try:
+                await animation_task
+            except asyncio.CancelledError:
+                pass
+            if spotify_items:
+                item["spotify_link"] = True
+                item["source"] = item.get("source") or "Spotify match"
             if m.from_user:
                 item["requested_by_id"] = m.from_user.id
                 item["requested_by_name"] = (m.from_user.first_name or "Group member")
@@ -1088,6 +1215,11 @@ def register_handlers(bot, calls, state, user_client=None):
                     logging.exception("Could not remove replaced track")
             await status.edit_text(player_text(item), reply_markup=player_keyboard(chat_id))
         except Exception as e:
+            animation_task.cancel()
+            try:
+                await animation_task
+            except asyncio.CancelledError:
+                pass
             detail = str(e)
             if "invite permission is required" in detail.lower() or "could not auto-join" in detail.lower():
                 error_text = detail + "\n\nAfter granting the permission, retry: /play SONG NAME"
