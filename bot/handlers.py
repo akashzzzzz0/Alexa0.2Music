@@ -30,23 +30,61 @@ def register_handlers(bot, calls, state):
                 "quiet": True, "no_warnings": True,
                 "format": "best[height<=720][ext=mp4]/best" if video else "bestaudio[acodec!=none]/bestaudio/best",
                 "concurrent_fragment_downloads": 4,
-                "retries": 10,
-                "fragment_retries": 10,
-                "file_access_retries": 3}
+                "retries": 3,
+                "fragment_retries": 5,
+                "file_access_retries": 3,
+                "ignoreerrors": False}
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, query, download=True)
-            if info.get("entries"):
-                info = next((x for x in info["entries"] if x), None)
-            if not info:
-                raise ValueError("No result found")
-            path = ydl.prepare_filename(info)
-            if not os.path.exists(path):
-                found = list(DIR.glob(str(info.get("id", "")) + ".*"))
-                if not found:
-                    raise FileNotFoundError("Media download missing")
-                path = str(found[0])
-            return {"title": info.get("title", "Unknown"), "duration": int(info.get("duration") or 0),
-                    "path": path, "video": video}
+            # Resolve search results first, then download one candidate at a time.
+            # If a result is unavailable, try the next result rather than failing
+            # the entire /play request on the first blocked or removed video.
+            search_mode = query.startswith("ytsearch")
+            if search_mode:
+                search_info = await asyncio.to_thread(ydl.extract_info, query, download=False)
+                entries = [x for x in (search_info or {}).get("entries", []) if x]
+                if not entries:
+                    raise ValueError("No playable search results were found.")
+                candidates = entries[:5]
+            else:
+                candidates = [query]
+
+            failures = []
+            for candidate in candidates:
+                url = candidate.get("webpage_url") or candidate.get("url") if isinstance(candidate, dict) else candidate
+                if not url:
+                    continue
+                try:
+                    info = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                    if info and info.get("entries"):
+                        info = next((x for x in info["entries"] if x), None)
+                    if not info:
+                        failures.append("No media details returned")
+                        continue
+                    path = ydl.prepare_filename(info)
+                    if not os.path.exists(path):
+                        found = list(DIR.glob(str(info.get("id", "")) + ".*"))
+                        if not found:
+                            failures.append("Downloaded media file was not created")
+                            continue
+                        path = str(found[0])
+                    return {"title": info.get("title", "Unknown"), "duration": int(info.get("duration") or 0),
+                            "path": path, "video": video}
+                except Exception as exc:
+                    logging.warning("Media candidate failed (%s): %s", url, str(exc)[:240])
+                    failures.append(str(exc))
+                    # Remove incomplete fragments/files before trying the next candidate.
+                    if isinstance(candidate, dict) and candidate.get("id"):
+                        for partial in DIR.glob(str(candidate["id"]) + ".*"):
+                            try:
+                                partial.unlink(missing_ok=True)
+                            except OSError:
+                                logging.exception("Could not remove partial download %s", partial)
+            if failures:
+                combined = " ".join(failures).lower()
+                if "sign in to confirm" in combined or "not a bot" in combined:
+                    raise RuntimeError("YouTube is temporarily requiring verification for these results. Please try another song or a direct audio URL; this is a YouTube restriction, not an FFmpeg error.")
+                raise RuntimeError("Could not download any of the first search results. Try a different song title or URL.")
+            raise ValueError("No playable result found.")
 
     async def start_item(chat_id, item):
         if item["video"]:
