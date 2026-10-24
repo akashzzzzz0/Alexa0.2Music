@@ -4,6 +4,8 @@ from pyrogram import Client
 from pyrogram.types import (BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats, BotCommandScopeAllChatAdministrators, BotCommandScopeChat)
 from pytgcalls import PyTgCalls
 from bot.handlers import register_handlers
+from bot.version import VERSION, RELEASE_NAME
+import time
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +21,8 @@ async def configure_command_menus(bot, owner_id):
     private_commands = [
         BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show all available commands"),
+        BotCommand("version", "Show Alexa Music version"),
+        BotCommand("health", "Check runtime status"),
         BotCommand("play", "Search and play music in a group"),
         BotCommand("vplay", "Play a video in a group"),
         BotCommand("queue", "Show the music queue"),
@@ -34,6 +38,8 @@ async def configure_command_menus(bot, owner_id):
     member_commands = [
         BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show member commands"),
+        BotCommand("version", "Show bot version"),
+        BotCommand("health", "Check runtime status"),
         BotCommand("voteskip", "Vote to skip a track"),
         BotCommand("ping", "Check bot status"),
         BotCommand("settings", "View music settings"),
@@ -41,6 +47,8 @@ async def configure_command_menus(bot, owner_id):
     admin_commands = [
         BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show admin commands"),
+        BotCommand("version", "Show bot version"),
+        BotCommand("health", "Check runtime status"),
         BotCommand("play", "Search and play music"),
         BotCommand("vplay", "Play a video"),
         BotCommand("queue", "Show the music queue"),
@@ -91,7 +99,7 @@ async def main():
                   session_string=need("SESSION_STRING"), in_memory=True)
     calls = PyTgCalls(user)
     state = {"owner_id": int(need("OWNER_ID")), "duration_limit": int(os.getenv("DURATION_LIMIT", "3600")),
-             "users": [], "groups": [], "plays": 0}
+             "users": [], "groups": [], "plays": 0, "started_at": time.time()}
     register_handlers(bot, calls, state)
     await bot.start()
     try:
@@ -100,11 +108,11 @@ async def main():
         logging.exception("Could not configure Telegram command menus; /help remains available")
     await user.start()
     await calls.start()
-    logging.info("ALEXA 0.2 Music started")
+    logging.info("ALEXA MUSIC V%s (%s) started", VERSION, RELEASE_NAME)
     try:
         await bot.send_message(
             state["owner_id"],
-            "✅ **ALEXA MUSIC BOT IS ACTIVE**\n\n🎧 Bot process started successfully.\n🎵 Music engine initialized.\n🟢 Ready to receive commands."
+            "✅ **ALEXA MUSIC V%s IS ACTIVE**\n\n🎧 %s\n🎵 Music engine initialized.\n🩺 Use /health for runtime diagnostics.\n🟢 Ready to receive commands." % (VERSION, RELEASE_NAME)
         )
         logging.info("Owner startup notification sent")
     except Exception:
