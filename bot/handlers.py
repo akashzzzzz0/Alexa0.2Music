@@ -276,8 +276,10 @@ def register_handlers(bot, calls, state):
             except Exception:
                 return False
 
-        updates_url = os.getenv("UPDATES_URL", "https://t.me/+X5aelUHksVRlODQ8").strip()
-        discuss_url = os.getenv("DISCUSSION_URL", "https://t.me/+dGq9_BqdD5hjYzk0").strip()
+        # Use the exact community links confirmed by the bot owner.
+        # This prevents stale/incorrect hosting environment values from breaking /start.
+        updates_url = "https://t.me/+X5aelUHksVRlODQ8"
+        discuss_url = "https://t.me/+dGq9_BqdD5hjYzk0"
         rows = []
         # Never build an invalid Telegram URL if get_me() returns no username.
         if username and re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
@@ -404,16 +406,22 @@ def register_handlers(bot, calls, state):
 
             # 3) Always show the complete welcome and buttons even if Telegram exposes no photo.
             if not photo_sent:
-                await reply(m, caption, reply_markup=markup)
+                try:
+                    await reply(m, caption, reply_markup=markup)
+                except Exception as send_exc:
+                    # Invalid Telegram button URLs must never block the /start welcome.
+                    if "BUTTON_URL_INVALID" in str(send_exc).upper() or "BUTTON URL INVALID" in str(send_exc).upper():
+                        logging.exception("Start keyboard URL rejected; sending welcome without buttons")
+                        await reply(m, caption)
+                    else:
+                        raise
         except Exception:
             logging.exception("Start command failed in chat %s", getattr(m.chat, "id", "unknown"))
             try:
-                # Keep the welcome buttons available even if another part of the start flow fails.
-                me = await bot.get_me()
+                # Final safety net: send plain text first so a bad button cannot block /start.
                 await reply(
                     m,
-                    f"🎧 **ALEXA MUSIC V{VERSION}**\nWelcome! Add Alexa to a group, start a voice chat, and use /play SONG.\n\nUse /help for commands.",
-                    reply_markup=start_keyboard(me.username or "")
+                    f"🎧 **ALEXA MUSIC V{VERSION}**\nWelcome! Add Alexa to a group, start a voice chat, and use /play SONG.\n\nUse /help for commands."
                 )
             except Exception:
                 logging.exception("Could not send /start fallback response")
