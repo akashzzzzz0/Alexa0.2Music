@@ -487,6 +487,57 @@ def register_handlers(bot, calls, state, user_client=None):
             except Exception:
                 pass
 
+    async def find_autoplay_next(finished):
+        """Try several title/artist searches and public providers for autoplay."""
+        title = str(finished.get("title") or "").strip()
+        artist = str(finished.get("artist") or "").strip()
+        if not title:
+            return None
+        queries = []
+        if artist:
+            queries.extend([
+                f"ytsearch8:{artist} similar songs",
+                f"ytsearch8:{artist} {title} related tracks",
+                f"scsearch8:{artist} similar songs",
+            ])
+        queries.extend([
+            f"ytsearch8:{title} similar songs",
+            f"ytsearch8:{title} music mix",
+            f"scsearch8:{title} similar songs",
+        ])
+        seen_titles = {title.casefold()}
+        for query in queries:
+            try:
+                candidate = await fetch(query, False)
+                candidate_title = str(candidate.get("title") or "").strip()
+                if not candidate_title or candidate_title.casefold() in seen_titles:
+                    if candidate.get("path"):
+                        Path(candidate["path"]).unlink(missing_ok=True)
+                    continue
+                candidate["autoplay"] = True
+                candidate["requested_by_id"] = finished.get("requested_by_id")
+                candidate["requested_by_name"] = finished.get("requested_by_name")
+                return candidate
+            except Exception as exc:
+                logging.warning("Autoplay query failed (%s): %s", query, str(exc)[:200])
+        for source_name, source_search in (("Audius", audius_fallback),
+                                           ("Internet Archive", internet_archive_fallback),
+                                           ("Bandcamp", bandcamp_fallback)):
+            try:
+                candidate = await source_search((artist + " " if artist else "") + title + " similar music")
+                candidate_title = str(candidate.get("title") or "").strip()
+                if not candidate_title or candidate_title.casefold() in seen_titles:
+                    if candidate.get("path"):
+                        Path(candidate["path"]).unlink(missing_ok=True)
+                    continue
+                candidate["autoplay"] = True
+                candidate["requested_by_id"] = finished.get("requested_by_id")
+                candidate["requested_by_name"] = finished.get("requested_by_name")
+                return candidate
+            except Exception as exc:
+                logging.warning("Autoplay %s fallback failed: %s", source_name, str(exc)[:200])
+        return None
+
     @calls.on_update(tgcall_filters.stream_end())
     async def handle_stream_end(_, update: StreamEnded):
         chat_id = update.chat_id
@@ -498,50 +549,61 @@ def register_handlers(bot, calls, state, user_client=None):
                 logging.exception("Could not remove finished media file")
         next_items = QUEUES.get(chat_id, [])
         next_item = next_items.pop(0) if next_items else None
-        if next_item is None and AUTOPLAY.get(chat_id, False) and finished:
-            # Search for a related follow-up; avoid replaying the exact same title.
-            seed = finished["title"]
+        was_autoplay = AUTOPLAY.get(chat_id, False)
+        if next_item is None and was_autoplay and finished:
+            logging.info("Autoplay is enabled; searching a follow-up for %s", chat_id)
             try:
-                next_item = await fetch("ytsearch5:" + seed + " similar songs mix", False)
-                if next_item["title"].strip().casefold() == seed.strip().casefold():
-                    Path(next_item["path"]).unlink(missing_ok=True)
-                    next_item = None
+                next_item = await find_autoplay_next(finished)
             except Exception:
                 logging.exception("Autoplay could not find a follow-up for %s", chat_id)
-                next_item = None
         if next_item:
             try:
                 if finished:
                     next_item["player_message_id"] = finished.get("player_message_id")
                 await start_item(chat_id, next_item)
-                logging.info("Auto-advanced queue in %s to %s", chat_id, next_item["title"])
+                logging.info("Auto-advanced playback in %s to %s", chat_id, next_item["title"])
+                player_id = next_item.get("player_message_id")
                 try:
-                    player_id = next_item.get("player_message_id")
                     if player_id:
                         await bot.edit_message_text(
                             chat_id, player_id, player_text(next_item),
                             reply_markup=player_keyboard(chat_id)
                         )
                     else:
-                        await bot.send_message(
+                        sent = await bot.send_message(
                             chat_id, player_text(next_item),
                             reply_markup=player_keyboard(chat_id)
                         )
+                        next_item["player_message_id"] = sent.id
                 except Exception:
                     logging.exception("Could not refresh player UI for next track")
-            except Exception:
-                logging.exception("Could not auto-advance queue in %s", chat_id)
+            except Exception as exc:
+                logging.exception("Could not auto-advance playback in %s", chat_id)
+                CURRENT.pop(chat_id, None)
                 try:
-                    await bot.send_message(chat_id, "❌ Next track failed to start. Try /skip or /play again.")
+                    await bot.send_message(
+                        chat_id,
+                        "⚠️ **The next track could not start.**\n"
+                        + str(exc)[:220]
+                        + ("\n🔁 Autoplay is still ON; try /play SONG NAME to restart." if was_autoplay else "")
+                    )
                 except Exception:
                     logging.exception("Could not report queue playback failure")
-                CURRENT.pop(chat_id, None)
         else:
             QUEUES.pop(chat_id, None)
             try:
                 await calls.leave_call(chat_id)
             except Exception:
                 logging.exception("Could not leave voice chat after queue ended")
+            if was_autoplay and finished:
+                try:
+                    await bot.send_message(
+                        chat_id,
+                        "🔁 **Autoplay is ON, but no different playable follow-up was found.**\n"
+                        "Try adding the artist name to your last /play request, or queue another song with /play."
+                    )
+                except Exception:
+                    logging.exception("Could not report autoplay search failure")
 
     # Store group message metadata and text for owner-only search.
     import sqlite3
