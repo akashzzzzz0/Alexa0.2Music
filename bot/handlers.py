@@ -82,20 +82,21 @@ def register_handlers(bot, calls, state):
                                 logging.exception("Could not remove partial download %s", partial)
             if failures:
                 combined = " ".join(failures).lower()
-                # If YouTube blocks a searched music result, try a separate supported
-                # source instead of attempting to bypass YouTube's verification.
-                if (not video and query.startswith("ytsearch")
-                        and ("sign in to confirm" in combined or "not a bot" in combined)):
-                    search_term = query.split(":", 1)[1]
-                    logging.warning("YouTube verification blocked search; trying SoundCloud search fallback")
+                # For a song-name search, try a separate supported audio source
+                # whenever YouTube candidates fail, not only on bot-verification errors.
+                if not video and query.startswith("ytsearch"):
+                    search_term = query.split(":", 1)[1].strip()
+                    logging.warning("YouTube search candidates failed; trying SoundCloud fallback for %r", search_term)
                     try:
-                        return await fetch("scsearch5:" + search_term, video)
+                        return await fetch("scsearch5:" + search_term, False)
                     except Exception as fallback_exc:
-                        logging.warning("Alternate music-source fallback failed: %s", str(fallback_exc)[:200])
-                    raise RuntimeError("YouTube is requiring verification and the alternate music source could not provide this track. Try another song or a direct audio URL. This is a source restriction, not an FFmpeg error.")
+                        logging.warning("SoundCloud fallback failed for %r: %s", search_term, str(fallback_exc)[:200])
+                    if "sign in to confirm" in combined or "not a bot" in combined:
+                        raise RuntimeError("YouTube blocked the search and SoundCloud had no playable match. Try a more specific song title or a direct audio URL.")
+                    raise RuntimeError("No playable match was found on YouTube or SoundCloud. Try adding the artist name, or use a direct audio URL.")
                 if "sign in to confirm" in combined or "not a bot" in combined:
-                    raise RuntimeError("YouTube is requiring verification for this URL. Try another source or a direct audio URL. This is a YouTube restriction, not an FFmpeg error.")
-                raise RuntimeError("Could not download any of the first search results. Try a different song title or URL.")
+                    raise RuntimeError("YouTube is requiring verification for this URL. Try another supported source or a direct audio URL.")
+                raise RuntimeError("Could not download this track. Try a more specific song title or a supported direct URL.")
             raise ValueError("No playable result found.")
 
     async def start_item(chat_id, item):
