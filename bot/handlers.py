@@ -202,34 +202,68 @@ def register_handlers(bot, calls, state):
     async def role_help(m):
         if not m.from_user:
             return "🎵 Use /help in a group to see available commands."
-        if m.from_user.id == state["owner_id"]:
-            return ("🛡️ **BOT OWNER — GLOBAL ACCESS**\n"
-                    "/owner — Owner Panel\n/stats — Statistics\n/broadcast MESSAGE — Broadcast\n"
-                    "/banall GROUP_ID — Ban accessible non-admin members\n"
-                    "/banuser GROUP_ID USER_ID\n/unbanuser GROUP_ID USER_ID\n"
-                    "/kick GROUP_ID USER_ID\n/mute GROUP_ID USER_ID [minutes]\n"
-                    "/unmute GROUP_ID USER_ID\n/chatsearch GROUP_ID words\n/reload — Refresh admin cache/settings\n"
-                    "Music: /play, /vplay, /queue, /autoplay on|off, /pause, /resume, /skip, /stop")
-        if is_group_chat(m):
-            try:
-                member = await bot.get_chat_member(m.chat.id, m.from_user.id)
-                status = str(member.status).lower()
-                if status.endswith("administrator") or status.endswith("owner"):
-                    return ("🎧 **GROUP ADMIN / OWNER**\n"
-                            "/play SONG — Search and play music\n/vplay URL — Play video\n/queue • /autoplay on|off\n"
-                            "/pause • /resume • /skip • /stop\n"
-                            "/auth (reply to a member) • /unauth (reply to a member)\n"
-                            "/voteskip — Open a skip vote\n/reload — Refresh admin cache/settings\n/ping • /settings")
-                import sqlite3
-                with sqlite3.connect(DB_PATH) as db:
-                    authorized = db.execute("SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?", (m.chat.id, m.from_user.id)).fetchone()
-                if authorized:
-                    return ("🎵 **AUTHORIZED MUSIC MEMBER**\n/play SONG • /vplay URL • /autoplay on|off\n"
-                            "/queue • /pause • /resume • /skip • /stop\n/voteskip • /ping • /settings")
-            except Exception:
-                pass
-        return ("🎶 **MEMBER COMMANDS**\n/voteskip — Vote to skip the current track\n"
-                "/ping — Check bot status\n/settings — View music settings\n/help — Show commands")
+
+        is_owner = m.from_user.id == state["owner_id"]
+        in_group = is_group_chat(m)
+
+        # In private chat, show the complete personal command list.
+        # Owner-only commands are only shown to the configured bot owner.
+        if not in_group:
+            general = ("🎧 **ALEXA MUSIC — COMMANDS**\n"
+                       "/play SONG — Search and play music in a group\n"
+                       "/vplay URL — Play video in a group\n"
+                       "/queue — Show the queue\n/autoplay on|off — Toggle autoplay\n"
+                       "/pause • /resume • /skip • /stop — Playback controls\n"
+                       "/voteskip — Vote to skip a track\n"
+                       "/ping — Check bot status\n/settings — View music settings\n"
+                       "/help — Show commands")
+            if is_owner:
+                return ("🛡️ **BOT OWNER — ALL COMMANDS**\n"
+                        + general + "\n\n"
+                        "/owner — Owner Panel\n/stats — Statistics\n"
+                        "/broadcast MESSAGE — Broadcast to recorded users/groups\n"
+                        "/banall GROUP_ID — Confirm a group-wide ban\n"
+                        "/banuser GROUP_ID USER_ID\n/unbanuser GROUP_ID USER_ID\n"
+                        "/kick GROUP_ID USER_ID\n/mute GROUP_ID USER_ID [minutes]\n"
+                        "/unmute GROUP_ID USER_ID\n/chatsearch GROUP_ID WORDS\n"
+                        "/reload — Refresh settings/admin cache")
+            return general
+
+        # Group help is always scoped to group permissions, even for the bot owner.
+        try:
+            member = await bot.get_chat_member(m.chat.id, m.from_user.id)
+            status = str(getattr(member.status, "value", member.status)).lower().rsplit(".", 1)[-1]
+            if status.endswith("administrator") or status.endswith("owner"):
+                return ("🎧 **GROUP ADMIN / GC OWNER COMMANDS**\n"
+                        "/play SONG — Search and play music\n/vplay URL — Play video\n"
+                        "/queue — Show queue\n/autoplay on|off — Toggle autoplay\n"
+                        "/pause • /resume • /skip • /stop — Playback controls\n"
+                        "/auth USER_ID (or reply) • /unauth USER_ID (or reply)\n"
+                        "/enablelogs • /disablelogs — Toggle message logging\n"
+                        "/reload — Refresh group admin cache/settings\n"
+                        "/voteskip — Open a skip vote\n/ping • /settings • /help")
+        except Exception:
+            pass
+
+        try:
+            import sqlite3
+            with sqlite3.connect(DB_PATH) as db:
+                authorized = db.execute(
+                    "SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?",
+                    (m.chat.id, m.from_user.id)
+                ).fetchone()
+            if authorized:
+                return ("🎵 **AUTHORIZED MEMBER COMMANDS**\n"
+                        "/play SONG • /vplay URL • /autoplay on|off\n"
+                        "/queue • /pause • /resume • /skip • /stop\n"
+                        "/voteskip • /ping • /settings • /help")
+        except Exception:
+            logging.exception("Could not check authorized music member")
+
+        return ("🎶 **GROUP MEMBER COMMANDS**\n"
+                "/voteskip — Vote to skip the current track\n"
+                "/ping — Check bot status\n/settings — View music settings\n"
+                "/help — Show commands")
 
     @bot.on_message(filters.command("start") & (filters.private | filters.group))
     async def start(_, m):
