@@ -252,7 +252,8 @@ def register_handlers(bot, calls, state, user_client=None):
                             except Exception as bandcamp_exc:
                                 logging.warning("Bandcamp search failed for %r: %s",
                                                 search_term, str(bandcamp_exc)[:300])
-                            for source_name, source_search in (("Audius", audius_fallback),
+                            for source_name, source_search in (("JioSaavn", jiosaavn_fallback),
+                                                               ("Audius", audius_fallback),
                                                                ("Internet Archive", internet_archive_fallback)):
                                 try:
                                     return await source_search(search_term)
