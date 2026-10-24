@@ -192,6 +192,30 @@ def register_handlers(bot, calls, state, user_client=None):
                 + str(verify_exc)[:160]
             ) from verify_exc
 
+    def format_duration(seconds):
+        seconds = max(0, int(seconds or 0))
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    def player_text(item):
+        mode = "📺 VIDEO" if item.get("video") else "🎧 MUSIC"
+        artist = item.get("artist")
+        duration = format_duration(item.get("duration", 0))
+        return (f"🎵 **ALEXA MUSIC — NOW PLAYING**\n\n"
+                f"**{item.get('title', 'Unknown track')}**\n"
+                + (f"👤 {artist}\n" if artist else "")
+                + f"⏱ {duration}\n{mode}\n\n"
+                "Use the buttons below to control playback.")
+
+    def player_keyboard(chat_id):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏸ Pause", callback_data=f"musicctl:pause:{chat_id}"),
+             InlineKeyboardButton("▶️ Resume", callback_data=f"musicctl:resume:{chat_id}")],
+            [InlineKeyboardButton("⏭ Skip", callback_data=f"musicctl:skip:{chat_id}"),
+             InlineKeyboardButton("⏹ Stop", callback_data=f"musicctl:stop:{chat_id}")],
+            [InlineKeyboardButton("🎶 Queue", callback_data=f"musicctl:queue:{chat_id}"),
+             InlineKeyboardButton("🔁 Autoplay", callback_data=f"musicctl:autoplay:{chat_id}")]
+        ])
+
     async def start_item(chat_id, item):
         await ensure_session_in_group(chat_id)
         if item["video"]:
@@ -201,6 +225,92 @@ def register_handlers(bot, calls, state, user_client=None):
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH)
         await calls.play(chat_id, media)
         CURRENT[chat_id] = item
+
+    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|skip|stop|queue|autoplay):-?\d+$"))
+    async def music_player_controls(_, q):
+        if not q.from_user:
+            return await q.answer("Cannot identify user.", show_alert=True)
+        try:
+            _, action, raw_chat_id = q.data.split(":")
+            chat_id = int(raw_chat_id)
+            if q.from_user.id != state["owner_id"]:
+                try:
+                    member = await bot.get_chat_member(chat_id, q.from_user.id)
+                    status = str(getattr(member, "status", "")).lower().rsplit(".", 1)[-1]
+                    if status not in ("administrator", "owner"):
+                        import sqlite3
+                        with sqlite3.connect(DB_PATH) as db:
+                            allowed = db.execute(
+                                "SELECT 1 FROM authorized_users WHERE group_id=? AND user_id=?",
+                                (chat_id, q.from_user.id)
+                            ).fetchone()
+                        if not allowed:
+                            return await q.answer("Only group admins or authorized users can control music.", show_alert=True)
+                except Exception:
+                    return await q.answer("Could not verify your group permissions.", show_alert=True)
+
+            if action == "pause":
+                await calls.pause_stream(chat_id)
+                await q.answer("Paused")
+            elif action == "resume":
+                await calls.resume_stream(chat_id)
+                await q.answer("Resumed")
+            elif action == "skip":
+                queued = QUEUES.get(chat_id, [])
+                old = CURRENT.get(chat_id)
+                if queued:
+                    nxt = queued.pop(0)
+                    if old:
+                        nxt["player_message_id"] = old.get("player_message_id")
+                    await start_item(chat_id, nxt)
+                    if old and old.get("path") != nxt.get("path"):
+                        Path(old["path"]).unlink(missing_ok=True)
+                    if nxt.get("player_message_id"):
+                        await bot.edit_message_text(chat_id, nxt["player_message_id"],
+                            player_text(nxt), reply_markup=player_keyboard(chat_id))
+                    await q.answer("Skipped to next track")
+                else:
+                    await calls.leave_call(chat_id)
+                    CURRENT.pop(chat_id, None)
+                    if old:
+                        Path(old["path"]).unlink(missing_ok=True)
+                    await q.answer("Queue is empty; playback stopped")
+                    try:
+                        await q.message.edit_text("⏹ Playback stopped — queue is empty.")
+                    except Exception:
+                        pass
+            elif action == "stop":
+                old = CURRENT.pop(chat_id, None)
+                QUEUES.pop(chat_id, None)
+                await calls.leave_call(chat_id)
+                if old:
+                    Path(old["path"]).unlink(missing_ok=True)
+                await q.answer("Playback stopped")
+                try:
+                    await q.message.edit_text("⏹ **Playback stopped and queue cleared.**")
+                except Exception:
+                    pass
+            elif action == "queue":
+                queue = QUEUES.get(chat_id, [])
+                lines = ["🎵 **UP NEXT**"] + [
+                    f"{i}. {item.get('title', 'Unknown')}" for i, item in enumerate(queue[:15], 1)
+                ]
+                await q.answer()
+                await q.message.reply_text("\n".join(lines) if queue else "🎶 Queue is empty.")
+            elif action == "autoplay":
+                AUTOPLAY[chat_id] = not AUTOPLAY.get(chat_id, False)
+                await q.answer("Autoplay " + ("enabled" if AUTOPLAY[chat_id] else "disabled"))
+                current = CURRENT.get(chat_id)
+                if current and current.get("player_message_id"):
+                    await bot.edit_message_text(chat_id, current["player_message_id"],
+                        player_text(current) + "\n\n🔁 Autoplay: " + ("ON" if AUTOPLAY[chat_id] else "OFF"),
+                        reply_markup=player_keyboard(chat_id))
+        except Exception as exc:
+            logging.exception("Music player button failed")
+            try:
+                await q.answer("Control failed: " + str(exc)[:100], show_alert=True)
+            except Exception:
+                pass
 
     @calls.on_update(tgcall_filters.stream_end())
     async def handle_stream_end(_, update: StreamEnded):
@@ -623,7 +733,7 @@ def register_handlers(bot, calls, state, user_client=None):
             await reply(m, "I couldn't verify your group admin status. Please try again.")
             return False
 
-    async def request(m, video):
+    async def request(m, video, force=False):
         if not is_group_chat(m):
             return await reply(m, "Use this command in a group.")
         if m.chat.id not in state["groups"]:
@@ -640,12 +750,21 @@ def register_handlers(bot, calls, state, user_client=None):
                 Path(item["path"]).unlink(missing_ok=True)
                 return await status.edit_text("This track exceeds the configured duration limit.")
             chat_id = m.chat.id
-            if chat_id in CURRENT:
+            if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
                 return await status.edit_text("➕ Queued: **" + item["title"] + "**")
+            previous = CURRENT.get(chat_id)
+            if force:
+                QUEUES.pop(chat_id, None)
+            item["player_message_id"] = previous.get("player_message_id", status.id) if previous and not force else status.id
             await start_item(chat_id, item)
             state["plays"] += 1
-            await status.edit_text(("📺" if video else "🎵") + " Playing: **" + item["title"] + "**")
+            if previous and previous.get("path") != item.get("path"):
+                try:
+                    Path(previous["path"]).unlink(missing_ok=True)
+                except OSError:
+                    logging.exception("Could not remove replaced track")
+            await status.edit_text(player_text(item), reply_markup=player_keyboard(chat_id))
         except Exception as e:
             error_text = "❌ Playback failed: " + str(e)[:220] + "\nCheck active voice chat, user session, FFmpeg and host compatibility."
             try:
@@ -665,6 +784,15 @@ def register_handlers(bot, calls, state, user_client=None):
     @bot.on_message(filters.command("play") & filters.private)
     async def play_private(_, m):
         await reply(m, "🎵 /play works inside a group voice chat. Add Alexa to your group, start a voice chat, then use /play SONG NAME there.", reply_markup=start_keyboard((await bot.get_me()).username or ""))
+
+    @bot.on_message(filters.command("playforce") & filters.group)
+    async def playforce(_, m):
+        if await music_admin_only(m):
+            await request(m, False, force=True)
+
+    @bot.on_message(filters.command("playforce") & filters.private)
+    async def playforce_private(_, m):
+        await reply(m, "🎵 Use /playforce SONG NAME in the target group's voice chat to replace the current track.")
 
     @bot.on_message(filters.command("vplay") & filters.group)
     async def vplay(_, m):
