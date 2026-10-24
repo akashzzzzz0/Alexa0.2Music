@@ -316,12 +316,26 @@ def register_handlers(bot, calls, state):
                        "➕ Add Alexa to your group, start a voice chat, and enjoy!")
             markup = start_keyboard(me.username or "")
             photo_url = os.getenv("START_IMAGE_URL", "").strip()
+            # Prefer an explicitly configured image; otherwise use Alexa's own profile photo.
             if photo_url:
                 try:
                     await bot.send_photo(m.chat.id, photo=photo_url, caption=caption, reply_markup=markup)
                     return
                 except Exception:
-                    logging.exception("START_IMAGE_URL failed; falling back to text")
+                    logging.exception("START_IMAGE_URL failed; trying Alexa's profile photo")
+            try:
+                profile_photo_id = getattr(getattr(me, "photo", None), "big_file_id", None)
+                if not profile_photo_id:
+                    try:
+                        self_chat = await bot.get_chat(me.id)
+                        profile_photo_id = getattr(getattr(self_chat, "photo", None), "big_file_id", None)
+                    except Exception:
+                        logging.exception("Could not retrieve Alexa's profile photo")
+                if profile_photo_id:
+                    await bot.send_photo(m.chat.id, photo=profile_photo_id, caption=caption, reply_markup=markup)
+                    return
+            except Exception:
+                logging.exception("Alexa profile photo send failed; falling back to text")
             await reply(m, caption, reply_markup=markup)
         except Exception:
             logging.exception("Start command failed in chat %s", getattr(m.chat, "id", "unknown"))
@@ -466,17 +480,37 @@ def register_handlers(bot, calls, state):
             state["plays"] += 1
             await status.edit_text(("📺" if video else "🎵") + " Playing: **" + item["title"] + "**")
         except Exception as e:
-            await status.edit_text("❌ Playback failed: " + str(e)[:220] + "\nCheck active voice chat, user session, FFmpeg and host compatibility.")
+            error_text = "❌ Playback failed: " + str(e)[:220] + "\nCheck active voice chat, user session, FFmpeg and host compatibility."
+            try:
+                await status.edit_text(error_text)
+            except Exception:
+                logging.exception("Could not edit /play status message")
+                try:
+                    await reply(m, error_text)
+                except Exception:
+                    logging.exception("Could not send /play failure reply")
 
     @bot.on_message(filters.command("play") & filters.group)
     async def play(_, m):
         if await music_admin_only(m):
             await request(m, False)
 
+    @bot.on_message(filters.command("play") & filters.private)
+    async def play_private(_, m):
+        await reply(m, "🎵 /play works inside a group voice chat. Add Alexa to your group, start a voice chat, then use /play SONG NAME there.", reply_markup=start_keyboard((await bot.get_me()).username or ""))
+
     @bot.on_message(filters.command("vplay") & filters.group)
     async def vplay(_, m):
         if await music_admin_only(m):
             await request(m, True)
+
+    @bot.on_message(filters.command("vplay") & filters.private)
+    async def vplay_private(_, m):
+        await reply(m, "📺 /vplay works inside a group voice chat. Add Alexa to your group, start a voice chat, then use /vplay VIDEO URL there.", reply_markup=start_keyboard((await bot.get_me()).username or ""))
+
+    @bot.on_message(filters.command("autoplay") & filters.private)
+    async def autoplay_private(_, m):
+        await reply(m, "🔁 Use /autoplay on or /autoplay off inside the group where Alexa is playing music.")
 
     @bot.on_message(filters.command("autoplay") & filters.group)
     async def autoplay_cmd(_, m):
@@ -503,6 +537,26 @@ def register_handlers(bot, calls, state):
         lines = ["🎶 Now: " + current["title"] if current else "Nothing is playing."]
         lines += [str(i) + ". " + x["title"] for i, x in enumerate(items, 1)]
         await reply(m, "\n".join(lines[:25]))
+
+    @bot.on_message(filters.command("pause") & filters.private)
+    async def pause_private(_, m):
+        await reply(m, "⏸ Use /pause in the group voice chat where Alexa is playing.")
+
+    @bot.on_message(filters.command("resume") & filters.private)
+    async def resume_private(_, m):
+        await reply(m, "▶️ Use /resume in the group voice chat where Alexa is playing.")
+
+    @bot.on_message(filters.command("skip") & filters.private)
+    async def skip_private(_, m):
+        await reply(m, "⏭ Use /skip in the group voice chat where Alexa is playing.")
+
+    @bot.on_message(filters.command("stop") & filters.private)
+    async def stop_private(_, m):
+        await reply(m, "⏹ Use /stop in the group voice chat where Alexa is playing.")
+
+    @bot.on_message(filters.command("voteskip") & filters.private)
+    async def voteskip_private(_, m):
+        await reply(m, "🗳️ Use /voteskip in the group where Alexa is playing.")
 
     @bot.on_message(filters.command("pause") & filters.group)
     async def pause(_, m):
