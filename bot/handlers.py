@@ -1078,48 +1078,134 @@ def register_handlers(bot, calls, state, user_client=None):
         except Exception as e:
             await reply(m, "Resume failed: " + str(e)[:140])
 
-    # Group members can vote to skip; each user gets one vote per track.
+    # Group members can vote to skip; four distinct users are required per track.
     VOTES = {}
+
+    def vote_keyboard(cid, count):
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"⏭ Vote to skip ({count}/4)", callback_data=f"musicvote:{cid}")
+        ]])
 
     @bot.on_message(filters.command("voteskip") & filters.group)
     async def vote_skip(_, m):
         cid = m.chat.id
-        if cid not in CURRENT:
+        current = CURRENT.get(cid)
+        if not current:
             return await reply(m, "Nothing is playing right now.")
-        VOTES[cid] = {"voters": set(), "message_id": None}
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Vote to skip (0/4)", callback_data=f"musicvote:{cid}")]])
-        msg = await reply(m, "🗳️ **Vote to skip this track**\nFour different group members are needed. Each member gets one vote per vote session; group admins can use /skip directly.", reply_markup=kb)
-        VOTES[cid]["message_id"] = msg.id
+        vote = VOTES.get(cid)
+        if not vote or vote.get("track_path") != current.get("path"):
+            msg = await reply(
+                m,
+                "🗳️ **Vote to skip this track**\\nFour different group members must vote. Group admins can use /skip directly.",
+                reply_markup=vote_keyboard(cid, 0)
+            )
+            VOTES[cid] = {
+                "voters": set(),
+                "message_id": msg.id,
+                "track_path": current.get("path"),
+                "track_title": current.get("title")
+            }
+        else:
+            await reply(m, "🗳️ A skip vote is already active for this track. Use its Vote to skip button.")
 
-    @bot.on_callback_query(filters.regex(r"^musicvote:-?\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicvote:-?\\d+$"))
     async def vote_skip_callback(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify voter.", show_alert=True)
         try:
             cid = int(q.data.split(":", 1)[1])
+            current = CURRENT.get(cid)
+            if not current:
+                return await q.answer("Nothing is playing right now.", show_alert=True)
             vote = VOTES.get(cid)
-            if not vote or cid not in CURRENT:
-                return await q.answer("This vote is no longer active.", show_alert=True)
+            if not vote or vote.get("track_path") != current.get("path"):
+                # A Vote Skip button on the player card starts a fresh vote and counts
+                # the first tap, so members do not need to run /voteskip first.
+                msg = await bot.send_message(
+                    cid,
+                    "🗳️ **Vote to skip this track**\\nFour different group members must vote. Group admins can use /skip directly.",
+                    reply_markup=vote_keyboard(cid, 0)
+                )
+                vote = {
+                    "voters": set(),
+                    "message_id": msg.id,
+                    "track_path": current.get("path"),
+                    "track_title": current.get("title")
+                }
+                VOTES[cid] = vote
             if q.from_user.id in vote["voters"]:
-                return await q.answer("You already voted.")
+                return await q.answer("You already voted on this track.")
             vote["voters"].add(q.from_user.id)
             count = len(vote["voters"])
-            if count >= 4:
+            if count < 4:
+                try:
+                    await bot.edit_message_reply_markup(
+                        cid, vote["message_id"], reply_markup=vote_keyboard(cid, count)
+                    )
+                except Exception:
+                    logging.exception("Could not update skip-vote counter")
+                return await q.answer(f"Vote counted ({count}/4).")
+            # Remove the active vote before changing tracks to prevent duplicate
+            # callbacks from skipping more than one song.
+            VOTES.pop(cid, None)
+            old = CURRENT.get(cid)
+            next_items = QUEUES.get(cid, [])
+            next_item = next_items.pop(0) if next_items else None
+            if next_item:
                 try:
                     await calls.leave_call(cid)
                     CURRENT.pop(cid, None)
-                    queue_items = QUEUES.get(cid, [])
-                    if queue_items:
-                        await start_item(cid, queue_items.pop(0))
-                    VOTES.pop(cid, None)
-                    await q.message.edit_text("⏭️ Vote passed! Track skipped.")
-                except Exception as e:
-                    await q.message.edit_text("Vote passed, but skipping failed: " + str(e)[:120])
-                return await q.answer("Vote passed!", show_alert=True)
-            await q.message.edit_reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton(f"⏭ Vote to skip ({count}/4)", callback_data=f"musicvote:{cid}")]]))
-            await q.answer("Vote counted.")
-        except Exception as e:
-            await q.answer("Vote failed: " + str(e)[:100], show_alert=True)
+                    if old:
+                        next_item["player_message_id"] = old.get("player_message_id")
+                    await start_item(cid, next_item)
+                    if old and old.get("path") != next_item.get("path"):
+                        Path(old["path"]).unlink(missing_ok=True)
+                    player_id = next_item.get("player_message_id")
+                    if player_id:
+                        await bot.edit_message_text(
+                            cid, player_id, player_text(next_item),
+                            reply_markup=player_keyboard(cid)
+                        )
+                    await bot.edit_message_text(
+                        cid, vote["message_id"],
+                        f"✅ **Vote passed ({count}/4)!**\\n⏭ Skipped to: **{next_item.get('title', 'Next track')}**"
+                    )
+                except Exception as exc:
+                    logging.exception("Vote passed but next track could not start")
+                    try:
+                        await bot.edit_message_text(
+                            cid, vote["message_id"],
+                            "⚠️ Vote passed, but the next track failed to start: " + str(exc)[:120]
+                        )
+                    except Exception:
+                        pass
+                    return await q.answer("Vote passed, but playback failed.", show_alert=True)
+            else:
+                try:
+                    await calls.leave_call(cid)
+                finally:
+                    CURRENT.pop(cid, None)
+                if old:
+                    Path(old["path"]).unlink(missing_ok=True)
+                    player_id = old.get("player_message_id")
+                    if player_id:
+                        try:
+                            await bot.edit_message_text(
+                                cid, player_id, "⏹ **Vote passed — playback stopped because the queue is empty.**"
+                            )
+                        except Exception:
+                            pass
+                await bot.edit_message_text(
+                    cid, vote["message_id"],
+                    f"✅ **Vote passed ({count}/4)!**\\n⏹ Queue is empty, so playback has stopped."
+                )
+            await q.answer("Vote passed!", show_alert=True)
+        except Exception as exc:
+            logging.exception("Skip-vote callback failed")
+            try:
+                await q.answer("Vote failed: " + str(exc)[:100], show_alert=True)
+            except Exception:
+                pass
 
     @bot.on_message(filters.command("skip") & filters.group)
     async def skip(_, m):
