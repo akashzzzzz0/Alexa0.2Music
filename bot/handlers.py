@@ -1,4 +1,5 @@
-import asyncio, logging, os, re, time
+import asyncio, logging, os, re, time, shutil
+from bot.version import VERSION, RELEASE_NAME
 from pathlib import Path
 import yt_dlp
 from pyrogram import filters
@@ -309,7 +310,7 @@ def register_handlers(bot, calls, state):
             if m.from_user and m.from_user.id not in state["users"]:
                 state["users"].append(m.from_user.id)
             me = await bot.get_me()
-            caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\n"
+            caption = (f"🎧 **ALEXA MUSIC V{VERSION} — {RELEASE_NAME}**\n"
                        "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\n\n"
                        "🎵 Smooth playback • Smart controls\n"
                        "🗳️ Community vote-to-skip • Group permissions\n\n"
@@ -363,7 +364,21 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("ping"))
     async def ping(_, m):
-        await reply(m, "🏓 ALEXA is online.")
+        await reply(m, "🏓 ALEXA MUSIC V" + VERSION + " is online.")
+
+    @bot.on_message(filters.command("version"))
+    async def version_cmd(_, m):
+        await reply(m, f"🎧 **ALEXA MUSIC V{VERSION}**\\n✨ {RELEASE_NAME}\\n\\nFree music bot • Group voice-chat playback\\nUse /health to check runtime status.")
+
+    @bot.on_message(filters.command("health"))
+    async def health_cmd(_, m):
+        uptime = max(0, int(time.time() - state.get("started_at", time.time())))
+        hours, remainder = divmod(uptime, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        active = len(CURRENT)
+        queued = sum(len(items) for items in QUEUES.values())
+        ffmpeg = "available" if shutil.which("ffmpeg") else "MISSING"
+        await reply(m, f"🩺 **ALEXA MUSIC HEALTH**\\nVersion: V{VERSION}\\nProcess: running\\nFFmpeg: {ffmpeg}\\nActive music chats: {active}\\nQueued tracks: {queued}\\nAutoplay groups: {sum(1 for enabled in AUTOPLAY.values() if enabled)}\\nUptime: {hours}h {minutes}m {seconds}s")
 
     @bot.on_message(filters.command("settings"))
     async def settings(_, m):
