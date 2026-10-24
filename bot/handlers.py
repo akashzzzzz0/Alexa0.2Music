@@ -14,7 +14,7 @@ QUEUES = {}
 CURRENT = {}
 AUTOPLAY = {}
 
-def register_handlers(bot, calls, state):
+def register_handlers(bot, calls, state, user_client=None):
     owner = filters.user(state["owner_id"])
     async def reply(m, text, **kw):
         await m.reply_text(text, disable_web_page_preview=True, **kw)
@@ -122,7 +122,69 @@ def register_handlers(bot, calls, state):
                 raise RuntimeError("Could not download this track. Try a more specific song title or a supported direct URL.")
             raise ValueError("No playable result found.")
 
+    async def ensure_session_in_group(chat_id):
+        """Ensure the PyTgCalls user account can access the target group."""
+        if user_client is None:
+            raise RuntimeError("Music session client is not configured. Check SESSION_STRING.")
+        me = await user_client.get_me()
+        try:
+            member = await user_client.get_chat_member(chat_id, me.id)
+            status = str(getattr(member, "status", "")).lower().rsplit(".", 1)[-1]
+            if status not in ("left", "kicked", "banned"):
+                return
+        except Exception as check_exc:
+            logging.info("Session membership check for %s failed; trying an invite link: %s",
+                         chat_id, str(check_exc)[:180])
+
+        # A bot admin can create a short-lived invite link; the user session joins
+        # through Telegram's normal invite flow. We never try to bypass group privacy.
+        invite = None
+        try:
+            invite = await bot.create_chat_invite_link(
+                chat_id, name="Alexa Music session", member_limit=1
+            )
+            await user_client.join_chat(invite.invite_link)
+            logging.info("Music session account joined group %s using a bot-created invite", chat_id)
+        except Exception as join_exc:
+            detail = str(join_exc)[:220]
+            lower = detail.lower()
+            if any(term in lower for term in ("user_already_participant", "already a participant")):
+                return
+            if any(term in lower for term in ("user_banned_in_channel", "banned", "kicked")):
+                raise RuntimeError(
+                    "The SESSION_STRING account is banned/kicked from this group. Unban it and try again."
+                ) from join_exc
+            if any(term in lower for term in ("invite_request_sent", "join request")):
+                raise RuntimeError(
+                    "Telegram requires a join request for the session account. Approve that request, then retry /play."
+                ) from join_exc
+            raise RuntimeError(
+                "Alexa could not auto-join the music session account. Make sure Alexa is an admin with "
+                "permission to invite users, and check that the SESSION_STRING account is not banned. "
+                "Telegram said: " + detail
+            ) from join_exc
+        finally:
+            if invite is not None:
+                try:
+                    await bot.revoke_chat_invite_link(chat_id, invite.invite_link)
+                except Exception:
+                    logging.debug("Could not revoke temporary music-session invite link for %s", chat_id)
+
+        try:
+            member = await user_client.get_chat_member(chat_id, (await user_client.get_me()).id)
+            status = str(getattr(member, "status", "")).lower().rsplit(".", 1)[-1]
+            if status in ("left", "kicked", "banned"):
+                raise RuntimeError("The music session account did not become a group member after joining.")
+        except RuntimeError:
+            raise
+        except Exception as verify_exc:
+            raise RuntimeError(
+                "The session account attempted to join, but Telegram still does not allow group access: "
+                + str(verify_exc)[:160]
+            ) from verify_exc
+
     async def start_item(chat_id, item):
+        await ensure_session_in_group(chat_id)
         if item["video"]:
             media = MediaStream(item["path"], audio_parameters=AudioQuality.HIGH,
                                 video_parameters=VideoQuality.HD_720p)
