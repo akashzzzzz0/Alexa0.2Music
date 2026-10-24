@@ -120,9 +120,26 @@ async def main():
     try:
         await asyncio.Event().wait()
     finally:
-        await calls.stop()
-        await user.stop()
-        await bot.stop()
+        # PyTgCalls 2.2.11 does not expose calls.stop() in every build.
+        # Guard cleanup so a shutdown signal does not raise a second exception.
+        stop_calls = getattr(calls, "stop", None)
+        if callable(stop_calls):
+            try:
+                result = stop_calls()
+                if hasattr(result, "__await__"):
+                    await result
+            except Exception:
+                logging.exception("PyTgCalls cleanup failed")
+        else:
+            logging.info("PyTgCalls has no stop() method in this installed version; skipping that cleanup step")
+        try:
+            await user.stop()
+        except Exception:
+            logging.exception("Could not stop the user client cleanly")
+        try:
+            await bot.stop()
+        except Exception:
+            logging.exception("Could not stop the bot client cleanly")
 
 if __name__ == "__main__":
     asyncio.run(main())
