@@ -56,6 +56,7 @@ Optional variables:
 - `UPDATES_URL`, `DISCUSSION_URL` — links shown in the start menu.
 - `START_IMAGE_URL` — publicly reachable image URL for the start screen; leave blank for text-only.
 - `ALEXA_DB_PATH` — path to the SQLite database. Use a path on storage that Botkeep explicitly keeps persistent, if available.
+- `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` — optional Spotify Developer app credentials for reading playlist/album track lists. Spotify track links can be identified without these in most cases. Alexa searches for a playable version on supported sources; it does not stream Spotify audio directly.
 
 ### Important Botkeep compatibility checks
 
