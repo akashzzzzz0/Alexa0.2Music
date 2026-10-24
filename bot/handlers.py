@@ -77,6 +77,18 @@ def register_handlers(bot, calls, state, user_client=None):
                                 + str(fallback_exc)[:250]
                             ) from fallback_exc
                     raise ValueError("No playable search results were found on the selected source.")
+                # Rank results against the requested song title instead of trusting
+                # YouTube's first result blindly.
+                if query.startswith("ytsearch") or query.startswith("scsearch"):
+                    search_term = query.split(":", 1)[1].strip().lower()
+                    wanted = set(re.findall(r"[a-z0-9]+", search_term))
+                    def candidate_score(candidate):
+                        title = str(candidate.get("title") or "").lower()
+                        words = set(re.findall(r"[a-z0-9]+", title))
+                        if not wanted:
+                            return 0.0
+                        return len(wanted & words) / len(wanted)
+                    entries.sort(key=candidate_score, reverse=True)
                 candidates = entries[:5]
             else:
                 candidates = [query]
@@ -100,7 +112,10 @@ def register_handlers(bot, calls, state, user_client=None):
                             failures.append("Downloaded media file was not created")
                             continue
                         path = str(found[0])
-                    return {"title": info.get("title", "Unknown"), "duration": int(info.get("duration") or 0),
+                    return {"title": info.get("title", "Unknown"),
+                            "artist": info.get("artist") or info.get("creator") or info.get("uploader"),
+                            "duration": int(info.get("duration") or 0),
+                            "url": info.get("webpage_url") or info.get("original_url"),
                             "path": path, "video": video}
                 except Exception as exc:
                     logging.warning("Media candidate failed (%s): %s", url, str(exc)[:240])
