@@ -481,8 +481,30 @@ def register_handlers(bot, calls, state, user_client=None):
              InlineKeyboardButton("🗳 Vote Skip", callback_data=f"musicvote:{chat_id}")],
             [InlineKeyboardButton("⏹ Stop", callback_data=f"musicctl:stop:{chat_id}")],
             [InlineKeyboardButton("🎶 Queue", callback_data=f"musicctl:queue:{chat_id}"),
-             InlineKeyboardButton("🔁 Autoplay", callback_data=f"musicctl:autoplay:{chat_id}")]
+             InlineKeyboardButton("🔁 Autoplay", callback_data=f"musicctl:autoplay:{chat_id}")],
+            [InlineKeyboardButton("✖️ Close Player UI", callback_data=f"musicctl:close:{chat_id}")]
         ])
+
+    async def finish_player_ui(chat_id, item, note="✅ Track finished."):
+        """Mark the old player card as inactive without stopping playback."""
+        message_id = (item or {}).get("player_message_id")
+        if not message_id:
+            return
+        try:
+            await bot.edit_message_text(chat_id, message_id, note, reply_markup=None)
+        except Exception:
+            logging.debug("Could not close old player card in %s", chat_id)
+
+    async def publish_player_ui(chat_id, item, previous=None, note="⏭️ Previous track skipped."):
+        """Give every newly started track its own player card."""
+        if previous:
+            await finish_player_ui(chat_id, previous, note)
+        sent = await bot.send_message(
+            chat_id,
+            player_text(item) + f"\n\n📃 **Tracks waiting:** {len(QUEUES.get(chat_id, []))}",
+            reply_markup=player_keyboard(chat_id)
+        )
+        item["player_message_id"] = sent.id
 
     async def start_item(chat_id, item):
         await ensure_session_in_group(chat_id)
@@ -494,13 +516,22 @@ def register_handlers(bot, calls, state, user_client=None):
         await calls.play(chat_id, media)
         CURRENT[chat_id] = item
 
-    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|skip|stop|queue|autoplay):-?\d+$"))
+    @bot.on_callback_query(filters.regex(r"^musicctl:(pause|resume|skip|stop|queue|autoplay|close):-?\d+$"))
     async def music_player_controls(_, q):
         if not q.from_user:
             return await q.answer("Cannot identify user.", show_alert=True)
         try:
             _, action, raw_chat_id = q.data.split(":")
             chat_id = int(raw_chat_id)
+            if action == "close":
+                current = CURRENT.get(chat_id)
+                if current and current.get("player_message_id") == getattr(q.message, "id", None):
+                    current["player_message_id"] = None
+                try:
+                    await q.message.delete()
+                except Exception:
+                    pass
+                return await q.answer("Player UI closed. Music will keep playing.")
             if q.from_user.id != state["owner_id"]:
                 try:
                     member = await bot.get_chat_member(chat_id, q.from_user.id)
@@ -518,11 +549,23 @@ def register_handlers(bot, calls, state, user_client=None):
                     return await q.answer("Could not verify your group permissions.", show_alert=True)
 
             if action == "pause":
-                await calls.pause_stream(chat_id)
-                await q.answer("Paused")
+                await q.answer("Pausing…")
+                try:
+                    await calls.pause_stream(chat_id)
+                except Exception as exc:
+                    logging.exception("Pause button failed in %s", chat_id)
+                    await bot.send_message(chat_id, "⚠️ Pause failed: " + str(exc)[:140])
+                    return
+                logging.info("Playback paused from player UI in %s", chat_id)
             elif action == "resume":
-                await calls.resume_stream(chat_id)
-                await q.answer("Resumed")
+                await q.answer("Resuming…")
+                try:
+                    await calls.resume_stream(chat_id)
+                except Exception as exc:
+                    logging.exception("Resume button failed in %s", chat_id)
+                    await bot.send_message(chat_id, "⚠️ Resume failed: " + str(exc)[:140])
+                    return
+                logging.info("Playback resumed from player UI in %s", chat_id)
             elif action == "skip":
                 queued = QUEUES.get(chat_id, [])
                 old = CURRENT.get(chat_id)
