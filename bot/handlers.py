@@ -254,7 +254,7 @@ def register_handlers(bot, calls, state):
                        "/queue — Show the queue\n/autoplay on|off — Toggle autoplay\n"
                        "/pause • /resume • /skip • /stop — Playback controls\n"
                        "/voteskip — Vote to skip a track\n"
-                       "/ping — Check bot status\n/settings — View music settings\n"
+                       "/ping — Check bot status\n/health — Runtime diagnostics\n/version — Show bot version\n/settings — View music settings\n"
                        "/help — Show commands")
             if is_owner:
                 return ("🛡️ **BOT OWNER — ALL COMMANDS**\n"
@@ -368,7 +368,7 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("version"))
     async def version_cmd(_, m):
-        await reply(m, f"🎧 **ALEXA MUSIC V{VERSION}**\\n✨ {RELEASE_NAME}\\n\\nFree music bot • Group voice-chat playback\\nUse /health to check runtime status.")
+        await reply(m, f"🎧 **ALEXA MUSIC V{VERSION}**\n✨ {RELEASE_NAME}\n\nFree music bot • Group voice-chat playback\nUse /health to check runtime status.")
 
     @bot.on_message(filters.command("health"))
     async def health_cmd(_, m):
@@ -378,7 +378,7 @@ def register_handlers(bot, calls, state):
         active = len(CURRENT)
         queued = sum(len(items) for items in QUEUES.values())
         ffmpeg = "available" if shutil.which("ffmpeg") else "MISSING"
-        await reply(m, f"🩺 **ALEXA MUSIC HEALTH**\\nVersion: V{VERSION}\\nProcess: running\\nFFmpeg: {ffmpeg}\\nActive music chats: {active}\\nQueued tracks: {queued}\\nAutoplay groups: {sum(1 for enabled in AUTOPLAY.values() if enabled)}\\nUptime: {hours}h {minutes}m {seconds}s")
+        await reply(m, f"🩺 **ALEXA MUSIC HEALTH**\nVersion: V{VERSION}\nProcess: running\nFFmpeg: {ffmpeg}\nActive music chats: {active}\nQueued tracks: {queued}\nAutoplay groups: {sum(1 for enabled in AUTOPLAY.values() if enabled)}\nUptime: {hours}h {minutes}m {seconds}s")
 
     @bot.on_message(filters.command("settings"))
     async def settings(_, m):
