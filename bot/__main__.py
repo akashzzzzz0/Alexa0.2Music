@@ -17,6 +17,7 @@ def need(key):
 async def configure_command_menus(bot, owner_id):
     """Install Telegram command menus for private chats, group members/admins, and bot owner."""
     private_commands = [
+        BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show all available commands"),
         BotCommand("play", "Search and play music in a group"),
         BotCommand("vplay", "Play a video in a group"),
@@ -31,12 +32,14 @@ async def configure_command_menus(bot, owner_id):
         BotCommand("settings", "View music settings"),
     ]
     member_commands = [
+        BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show member commands"),
         BotCommand("voteskip", "Vote to skip a track"),
         BotCommand("ping", "Check bot status"),
         BotCommand("settings", "View music settings"),
     ]
     admin_commands = [
+        BotCommand("start", "Open Alexa Music welcome menu"),
         BotCommand("help", "Show admin commands"),
         BotCommand("play", "Search and play music"),
         BotCommand("vplay", "Play a video"),
@@ -98,6 +101,14 @@ async def main():
     await user.start()
     await calls.start()
     logging.info("ALEXA 0.2 Music started")
+    try:
+        await bot.send_message(
+            state["owner_id"],
+            "✅ **ALEXA MUSIC BOT IS ACTIVE**\n\n🎧 Bot process started successfully.\n🎵 Music engine initialized.\n🟢 Ready to receive commands."
+        )
+        logging.info("Owner startup notification sent")
+    except Exception:
+        logging.exception("Could not send owner startup notification; check OWNER_ID and that the owner has started the bot in DM")
     try:
         await asyncio.Event().wait()
     finally:
