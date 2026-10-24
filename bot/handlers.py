@@ -59,6 +59,81 @@ def register_handlers(bot, calls, state, user_client=None):
             + ((" Details: " + " | ".join(failures[:2])) if failures else "")
         )
 
+    async def audius_fallback(search_term):
+        """Search Audius' public catalog and try its public track pages."""
+        api_url = "https://api.audius.co/v1/tracks/search?" + urllib.parse.urlencode({
+            "query": search_term, "app_name": "AlexaMusicBot", "limit": 5
+        })
+        def search_audius():
+            request = urllib.request.Request(
+                api_url, headers={"User-Agent": "AlexaMusic/1.0"}
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                payload = __import__("json").loads(response.read(1_000_000).decode("utf-8", "ignore"))
+            tracks = payload.get("data", []) if isinstance(payload, dict) else []
+            return [track.get("permalink") for track in tracks
+                    if isinstance(track, dict) and track.get("permalink")]
+        try:
+            urls = await asyncio.to_thread(search_audius)
+        except Exception as exc:
+            raise RuntimeError("Audius search unavailable: " + str(exc)[:120]) from exc
+        failures = []
+        for url in urls[:5]:
+            try:
+                return await fetch(url, False)
+            except Exception as exc:
+                failures.append(str(exc)[:100])
+        raise RuntimeError("Audius had no playable match." +
+                           ((" " + " | ".join(failures[:2])) if failures else ""))
+
+    async def internet_archive_fallback(search_term):
+        """Search Internet Archive's audio catalog; prefer downloadable audio files."""
+        search_url = "https://archive.org/advancedsearch.php?" + urllib.parse.urlencode([
+            ("q", "(" + search_term + ") AND mediatype:audio"),
+            ("fl[]", "identifier"), ("fl[]", "title"), ("rows", "5"),
+            ("page", "1"), ("output", "json")
+        ])
+        def search_archive():
+            request = urllib.request.Request(
+                search_url, headers={"User-Agent": "AlexaMusic/1.0"}
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                payload = __import__("json").loads(response.read(1_000_000).decode("utf-8", "ignore"))
+            docs = payload.get("response", {}).get("docs", [])
+            return [doc.get("identifier") for doc in docs
+                    if isinstance(doc, dict) and doc.get("identifier")]
+        try:
+            identifiers = await asyncio.to_thread(search_archive)
+        except Exception as exc:
+            raise RuntimeError("Internet Archive search unavailable: " + str(exc)[:120]) from exc
+        failures = []
+        for identifier in identifiers[:5]:
+            try:
+                metadata_url = "https://archive.org/metadata/" + urllib.parse.quote(identifier, safe="")
+                def get_audio_files():
+                    request = urllib.request.Request(
+                        metadata_url, headers={"User-Agent": "AlexaMusic/1.0"}
+                    )
+                    with urllib.request.urlopen(request, timeout=12) as response:
+                        payload = __import__("json").loads(response.read(1_000_000).decode("utf-8", "ignore"))
+                    files = payload.get("files", [])
+                    allowed = (".mp3", ".m4a", ".ogg", ".opus", ".flac", ".wav")
+                    return [item.get("name") for item in files
+                            if isinstance(item, dict)
+                            and str(item.get("name", "")).lower().endswith(allowed)
+                            and not item.get("private") and not item.get("source") == "original"]
+                filenames = await asyncio.to_thread(get_audio_files)
+                for filename in filenames[:3]:
+                    direct_url = "https://archive.org/download/" + urllib.parse.quote(identifier, safe="") + "/" + urllib.parse.quote(filename, safe="/")
+                    try:
+                        return await fetch(direct_url, False)
+                    except Exception as exc:
+                        failures.append(str(exc)[:100])
+            except Exception as exc:
+                failures.append(str(exc)[:100])
+        raise RuntimeError("Internet Archive had no playable audio match." +
+                           ((" " + " | ".join(failures[:2])) if failures else ""))
+
     async def fetch(query, video):
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
@@ -94,10 +169,17 @@ def register_handlers(bot, calls, state, user_client=None):
                             except Exception as bandcamp_exc:
                                 logging.warning("Bandcamp search failed for %r: %s",
                                                 search_term, str(bandcamp_exc)[:300])
-                                raise RuntimeError(
-                                    "YouTube, SoundCloud and Bandcamp could not find a playable track. "
-                                    "Try adding the artist name or send a supported direct track URL."
-                                ) from bandcamp_exc
+                            for source_name, source_search in (("Audius", audius_fallback),
+                                                               ("Internet Archive", internet_archive_fallback)):
+                                try:
+                                    return await source_search(search_term)
+                                except Exception as source_exc:
+                                    logging.warning("%s search failed for %r: %s",
+                                                    source_name, search_term, str(source_exc)[:220])
+                            raise RuntimeError(
+                                "YouTube, SoundCloud, Bandcamp, Audius and Internet Archive had no playable match. "
+                                "Try adding the artist name or a supported direct track URL."
+                            ) from bandcamp_exc
                     raise RuntimeError(
                         "Media search failed: " + str(search_exc)[:300]
                     ) from search_exc
@@ -114,10 +196,17 @@ def register_handlers(bot, calls, state, user_client=None):
                             except Exception as bandcamp_exc:
                                 logging.warning("Bandcamp search failed for %r: %s",
                                                 search_term, str(bandcamp_exc)[:300])
-                                raise RuntimeError(
-                                    "YouTube returned no results and SoundCloud/Bandcamp had no playable match. "
-                                    "Try adding the artist name or send a supported direct track URL."
-                                ) from bandcamp_exc
+                            for source_name, source_search in (("Audius", audius_fallback),
+                                                               ("Internet Archive", internet_archive_fallback)):
+                                try:
+                                    return await source_search(search_term)
+                                except Exception as source_exc:
+                                    logging.warning("%s search failed for %r: %s",
+                                                    source_name, search_term, str(source_exc)[:220])
+                            raise RuntimeError(
+                                "YouTube returned no playable results; SoundCloud, Bandcamp, Audius and Internet Archive "
+                                "also had no playable match. Try adding the artist name or a supported direct track URL."
+                            ) from bandcamp_exc
                     raise ValueError("No playable search results were found on the selected source.")
                 # Rank results against the requested song title instead of trusting
                 # YouTube's first result blindly.
@@ -185,9 +274,16 @@ def register_handlers(bot, calls, state, user_client=None):
                         return await bandcamp_fallback(search_term)
                     except Exception as bandcamp_exc:
                         logging.warning("Bandcamp fallback failed for %r: %s", search_term, str(bandcamp_exc)[:200])
+                    for source_name, source_search in (("Audius", audius_fallback),
+                                                       ("Internet Archive", internet_archive_fallback)):
+                        try:
+                            return await source_search(search_term)
+                        except Exception as source_exc:
+                            logging.warning("%s fallback failed for %r: %s",
+                                            source_name, search_term, str(source_exc)[:200])
                     if "sign in to confirm" in combined or "not a bot" in combined:
-                        raise RuntimeError("YouTube requires verification on this host, and SoundCloud/Bandcamp had no playable match. Try a more specific title or a supported direct track URL.")
-                    raise RuntimeError("No playable match was found on YouTube, SoundCloud or Bandcamp. Try adding the artist name or use a supported direct track URL.")
+                        raise RuntimeError("YouTube requires verification on this host, and SoundCloud, Bandcamp, Audius and Internet Archive had no playable match. Try a more specific title or a supported direct track URL.")
+                    raise RuntimeError("No playable match was found on YouTube, SoundCloud, Bandcamp, Audius or Internet Archive. Try adding the artist name or use a supported direct track URL.")
                 if "sign in to confirm" in combined or "not a bot" in combined:
                     raise RuntimeError("YouTube is requiring verification for this URL. Try another supported source or a direct audio URL.")
                 raise RuntimeError("Could not download this track. Try a more specific song title or a supported direct URL.")
@@ -270,11 +366,15 @@ def register_handlers(bot, calls, state, user_client=None):
         artist = item.get("artist")
         duration = format_duration(item.get("duration", 0))
         source = item.get("source") or "Audio stream"
+        requester_id = item.get("requested_by_id")
+        requester_name = str(item.get("requested_by_name") or "Group member").replace("[", "(").replace("]", ")")
+        requester = f"👤 Requested by: [{requester_name}](tg://user?id={requester_id})\n" if requester_id else ""
         return (f"🎶 **ALEXA MUSIC PLAYER**\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"▶️ **NOW PLAYING**\n\n"
                 f"🎵 **{item.get('title', 'Unknown track')}**\n"
                 + (f"🎤 {artist}\n" if artist else "")
+                + requester
                 + f"⏱️ {duration}   •   {mode}\n"
                 f"🌐 Source: {source}\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
@@ -285,7 +385,8 @@ def register_handlers(bot, calls, state, user_client=None):
             [InlineKeyboardButton("⏸ Pause", callback_data=f"musicctl:pause:{chat_id}"),
              InlineKeyboardButton("▶️ Resume", callback_data=f"musicctl:resume:{chat_id}")],
             [InlineKeyboardButton("⏭ Skip", callback_data=f"musicctl:skip:{chat_id}"),
-             InlineKeyboardButton("⏹ Stop", callback_data=f"musicctl:stop:{chat_id}")],
+             InlineKeyboardButton("🗳 Vote Skip", callback_data=f"musicvote:{chat_id}")],
+            [InlineKeyboardButton("⏹ Stop", callback_data=f"musicctl:stop:{chat_id}")],
             [InlineKeyboardButton("🎶 Queue", callback_data=f"musicctl:queue:{chat_id}"),
              InlineKeyboardButton("🔁 Autoplay", callback_data=f"musicctl:autoplay:{chat_id}")]
         ])
@@ -643,7 +744,7 @@ def register_handlers(bot, calls, state, user_client=None):
             caption = (f"🎧 **ALEXA MUSIC V{VERSION} — {RELEASE_NAME}**\n"
                        "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\n\n"
                        "🎵 Smooth playback • Smart controls\n"
-                       "🗳️ Community vote-to-skip • Group permissions\n\n"
+                       "🗳️ Community vote-to-skip • YouTube, SoundCloud, Bandcamp, Audius & Internet Archive\n\n"
                        "➕ Add Alexa to your group, start a voice chat, and enjoy!")
             markup = start_keyboard(me.username or "")
             photo_sent = False
@@ -836,6 +937,9 @@ def register_handlers(bot, calls, state, user_client=None):
             # missing invite permissions are explained immediately.
             await ensure_session_in_group(m.chat.id)
             item = await fetch(query, video)
+            if m.from_user:
+                item["requested_by_id"] = m.from_user.id
+                item["requested_by_name"] = (m.from_user.first_name or "Group member")
             if item["duration"] > state["duration_limit"]:
                 Path(item["path"]).unlink(missing_ok=True)
                 return await status.edit_text("This track exceeds the configured duration limit.")
@@ -983,8 +1087,8 @@ def register_handlers(bot, calls, state, user_client=None):
         if cid not in CURRENT:
             return await reply(m, "Nothing is playing right now.")
         VOTES[cid] = {"voters": set(), "message_id": None}
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Vote to skip (0/3)", callback_data=f"musicvote:{cid}")]])
-        msg = await reply(m, "🗳️ **Vote to skip this track**\nThree different group members are needed. Group admins can use /skip directly.", reply_markup=kb)
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Vote to skip (0/4)", callback_data=f"musicvote:{cid}")]])
+        msg = await reply(m, "🗳️ **Vote to skip this track**\nFour different group members are needed. Each member gets one vote per vote session; group admins can use /skip directly.", reply_markup=kb)
         VOTES[cid]["message_id"] = msg.id
 
     @bot.on_callback_query(filters.regex(r"^musicvote:-?\d+$"))
@@ -1000,7 +1104,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 return await q.answer("You already voted.")
             vote["voters"].add(q.from_user.id)
             count = len(vote["voters"])
-            if count >= 3:
+            if count >= 4:
                 try:
                     await calls.leave_call(cid)
                     CURRENT.pop(cid, None)
@@ -1012,7 +1116,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 except Exception as e:
                     await q.message.edit_text("Vote passed, but skipping failed: " + str(e)[:120])
                 return await q.answer("Vote passed!", show_alert=True)
-            await q.message.edit_reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton(f"⏭ Vote to skip ({count}/3)", callback_data=f"musicvote:{cid}")]]))
+            await q.message.edit_reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton(f"⏭ Vote to skip ({count}/4)", callback_data=f"musicvote:{cid}")]]))
             await q.answer("Vote counted.")
         except Exception as e:
             await q.answer("Vote failed: " + str(e)[:100], show_alert=True)
