@@ -261,17 +261,42 @@ def register_handlers(bot, calls, state):
             await reply(m, "Search failed: " + str(e)[:180])
 
     def start_keyboard(username):
+        from urllib.parse import urlparse
+
+        def valid_telegram_url(value):
+            value = (value or "").strip()
+            try:
+                parsed = urlparse(value)
+                return (
+                    parsed.scheme == "https"
+                    and parsed.hostname in ("t.me", "www.t.me", "telegram.me", "www.telegram.me")
+                    and bool(parsed.path.strip("/"))
+                    and not any(ch.isspace() for ch in value)
+                )
+            except Exception:
+                return False
+
         updates_url = os.getenv("UPDATES_URL", "https://t.me/+X5aelUHksVRlODQ8").strip()
         discuss_url = os.getenv("DISCUSSION_URL", "https://t.me/+dGq9_BqdD5hjYzk0").strip()
-        rows = [[InlineKeyboardButton("♛ 𝑨𝑫𝑫 𝑨𝑳𝑬𝑿𝑨 𝑰𝑵 𝒀𝑶𝑼𝑹 𝑮𝑹𝑶𝑼𝑷 ♛", url=f"https://t.me/{username}?startgroup=true")]]
+        rows = []
+        # Never build an invalid Telegram URL if get_me() returns no username.
+        if username and re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+            rows.append([InlineKeyboardButton(
+                "♛ 𝑨𝑫𝑫 𝑨𝑳𝑬𝑿𝑨 𝑰𝑵 𝒀𝑶𝑼𝑹 𝑮𝑹𝑶𝑼𝑷 ♛",
+                url=f"https://t.me/{username}?startgroup=true"
+            )])
         community = []
-        if updates_url:
+        if valid_telegram_url(updates_url):
             community.append(InlineKeyboardButton("♛ 𝑼𝑷𝑫𝑨𝑻𝑬𝑺", url=updates_url))
-        if discuss_url:
+        else:
+            logging.warning("Ignoring invalid UPDATES_URL in start keyboard")
+        if valid_telegram_url(discuss_url):
             community.append(InlineKeyboardButton("♛ 𝑫𝑰𝑺𝑪𝑼𝑺𝑺𝑰𝑶𝑵", url=discuss_url))
+        else:
+            logging.warning("Ignoring invalid DISCUSSION_URL in start keyboard")
         if community:
             rows.append(community)
-        return InlineKeyboardMarkup(rows)
+        return InlineKeyboardMarkup(rows) if rows else None
 
     async def role_help(m):
         if not m.from_user:
