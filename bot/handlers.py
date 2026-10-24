@@ -693,7 +693,7 @@ def register_handlers(bot, calls, state, user_client=None):
                                            ("Internet Archive", internet_archive_fallback),
                                            ("Bandcamp", bandcamp_fallback)):
             try:
-                candidate = await source_search((artist + " " if artist else "") + title + " similar music")
+                candidate = await source_search((artist + " " if artist else "") + title + " " + vibe_terms)
                 candidate_title = str(candidate.get("title") or "").strip()
                 if not candidate_title or candidate_title.casefold() in seen_titles:
                     if candidate.get("path"):
@@ -1603,15 +1603,6 @@ def register_handlers(bot, calls, state, user_client=None):
             return await reply(m, "Nothing is playing right now.")
         VOTES.pop(cid, None)
         queued = QUEUES.get(cid, [])
-        if not queued:
-            try:
-                await calls.leave_call(cid)
-            except Exception:
-                pass
-            CURRENT.pop(cid, None)
-            if old.get("path"):
-                Path(old["path"]).unlink(missing_ok=True)
-            return await reply(m, "⏭ Skipped. Queue is empty, so playback stopped.")
         nxt = queued.pop(0) if queued else None
         if nxt is None and AUTOPLAY.get(cid, False):
             nxt = await find_autoplay_next(old)
