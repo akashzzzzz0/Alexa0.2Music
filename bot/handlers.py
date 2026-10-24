@@ -307,6 +307,9 @@ def register_handlers(bot, calls, state, user_client=None):
                         path = str(found[0])
                     return {"title": info.get("title", "Unknown"),
                             "artist": info.get("artist") or info.get("creator") or info.get("uploader"),
+                            "genre": info.get("genre"),
+                            "categories": info.get("categories") or [],
+                            "tags": info.get("tags") or [],
                             "duration": int(info.get("duration") or 0),
                             "url": info.get("webpage_url") or info.get("original_url"),
                             "source": urllib.parse.urlparse(info.get("webpage_url") or info.get("original_url") or "").hostname or "Audio stream",
@@ -638,8 +641,14 @@ def register_handlers(bot, calls, state, user_client=None):
 
     def autoplay_vibe(item):
         """Infer a broad vibe from the original request and current track metadata."""
-        text = " ".join(str(item.get(k) or "") for k in
-                        ("requested_query", "title", "artist")).casefold()
+        metadata = item.get("categories") or []
+        tags = item.get("tags") or []
+        text = " ".join(
+            [str(item.get(k) or "") for k in
+             ("requested_query", "title", "artist", "genre", "autoplay_vibe")]
+            + [str(value) for value in metadata[:20]]
+            + [str(value) for value in tags[:40]]
+        ).casefold()
         vibes = [
             ("sad", ("sad", "heartbreak", "broken heart", "emotional", "cry", "lonely",
                      "dard", "bewafa", "judai", "tanha", "rona", "gham", "udaas", "udas")),
