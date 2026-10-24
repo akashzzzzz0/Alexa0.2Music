@@ -18,6 +18,13 @@ def register_handlers(bot, calls, state):
     async def reply(m, text, **kw):
         await m.reply_text(text, disable_web_page_preview=True, **kw)
 
+    def is_group_chat(m):
+        # PyrogramMod may expose chat.type as an enum rather than a plain string.
+        chat_type = getattr(getattr(m, "chat", None), "type", "")
+        value = str(getattr(chat_type, "value", chat_type)).lower()
+        value = value.rsplit(".", 1)[-1]
+        return value in ("group", "supergroup")
+
     async def fetch(query, video):
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
@@ -135,7 +142,7 @@ def register_handlers(bot, calls, state):
             logging.exception("Failed to record group activity")
 
     async def change_group_logging(m, enabled):
-        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+        if !is_group_chat(m) or not m.from_user:
             return await reply(m, "Use this command in the group.")
         try:
             member = await bot.get_chat_member(m.chat.id, m.from_user.id)
@@ -203,7 +210,7 @@ def register_handlers(bot, calls, state):
                     "/kick GROUP_ID USER_ID\n/mute GROUP_ID USER_ID [minutes]\n"
                     "/unmute GROUP_ID USER_ID\n/chatsearch GROUP_ID words\n/reload — Refresh admin cache/settings\n"
                     "Music: /play, /vplay, /queue, /autoplay on|off, /pause, /resume, /skip, /stop")
-        if m.chat.type in ("group", "supergroup"):
+        if is_group_chat(m):
             try:
                 member = await bot.get_chat_member(m.chat.id, m.from_user.id)
                 status = str(member.status).lower()
@@ -264,7 +271,7 @@ def register_handlers(bot, calls, state):
             return await reply(m, "Cannot identify the command sender.")
         is_owner = m.from_user.id == state["owner_id"]
         group_id = m.chat.id
-        is_group = m.chat.type in ("group", "supergroup")
+        is_group = is_group_chat(m)
         if not is_owner:
             if not is_group:
                 return await reply(m, "Only the bot owner can use /reload in private chat.")
@@ -296,7 +303,7 @@ def register_handlers(bot, calls, state):
             await reply(m, "❌ Reload failed: " + str(e)[:180])
 
     async def manage_auth(m, authorize):
-        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+        if !is_group_chat(m) or not m.from_user:
             return await reply(m, "Use /auth or /unauth in the group.")
         try:
             member = await bot.get_chat_member(m.chat.id, m.from_user.id)
@@ -337,7 +344,7 @@ def register_handlers(bot, calls, state):
         # owner/admins can control playback.
         if m.from_user and m.from_user.id == state["owner_id"]:
             return True
-        if m.chat.type not in ("group", "supergroup") or not m.from_user:
+        if !is_group_chat(m) or not m.from_user:
             await reply(m, "Use this command in a group.")
             return False
         try:
@@ -357,7 +364,7 @@ def register_handlers(bot, calls, state):
             return False
 
     async def request(m, video):
-        if m.chat.type not in ("group", "supergroup"):
+        if !is_group_chat(m):
             return await reply(m, "Use this command in a group.")
         if m.chat.id not in state["groups"]:
             state["groups"].append(m.chat.id)
