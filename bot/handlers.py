@@ -569,27 +569,39 @@ def register_handlers(bot, calls, state, user_client=None):
             elif action == "skip":
                 queued = QUEUES.get(chat_id, [])
                 old = CURRENT.get(chat_id)
-                if queued:
-                    nxt = queued.pop(0)
-                    if old:
-                        nxt["player_message_id"] = old.get("player_message_id")
-                    await start_item(chat_id, nxt)
-                    if old and old.get("path") != nxt.get("path"):
-                        Path(old["path"]).unlink(missing_ok=True)
-                    if nxt.get("player_message_id"):
-                        await bot.edit_message_text(chat_id, nxt["player_message_id"],
-                            player_text(nxt), reply_markup=player_keyboard(chat_id))
-                    await q.answer("Skipped to next track")
+                if not old:
+                    return await q.answer("Nothing is playing.", show_alert=True)
+                VOTES.pop(chat_id, None)
+                nxt = queued.pop(0) if queued else None
+                already_answered = False
+                if nxt is None and AUTOPLAY.get(chat_id, False):
+                    await q.answer("Finding a related next track…")
+                    already_answered = True
+                    nxt = await find_autoplay_next(old)
+                if nxt:
+                    try:
+                        await calls.leave_call(chat_id)
+                        CURRENT.pop(chat_id, None)
+                        await start_item(chat_id, nxt)
+                        if old.get("path") and old.get("path") != nxt.get("path"):
+                            Path(old["path"]).unlink(missing_ok=True)
+                        await publish_player_ui(chat_id, nxt, old, "⏭️ Previous track skipped.")
+                        if not already_answered:
+                            await q.answer("Skipped to next track")
+                    except Exception as exc:
+                        logging.exception("Skip button could not start next track")
+                        if not already_answered:
+                            await q.answer("Next track failed: " + str(exc)[:100], show_alert=True)
+                        else:
+                            await bot.send_message(chat_id, "⚠️ Next track failed: " + str(exc)[:120])
                 else:
                     await calls.leave_call(chat_id)
                     CURRENT.pop(chat_id, None)
-                    if old:
+                    if old.get("path"):
                         Path(old["path"]).unlink(missing_ok=True)
-                    await q.answer("Queue is empty; playback stopped")
-                    try:
-                        await q.message.edit_text("⏹ Playback stopped — queue is empty.")
-                    except Exception:
-                        pass
+                    await finish_player_ui(chat_id, old, "⏹ Playback stopped — queue is empty.")
+                    if not already_answered:
+                        await q.answer("No queued or related track found; playback stopped")
             elif action == "stop":
                 old = CURRENT.pop(chat_id, None)
                 QUEUES.pop(chat_id, None)
@@ -619,24 +631,47 @@ def register_handlers(bot, calls, state, user_client=None):
             except Exception:
                 pass
 
+    def autoplay_vibe(item):
+        """Infer a broad vibe from the original request and current track metadata."""
+        text = " ".join(str(item.get(k) or "") for k in
+                        ("requested_query", "title", "artist")).casefold()
+        vibes = [
+            ("sad", ("sad", "heartbreak", "broken heart", "emotional", "cry", "lonely",
+                     "dard", "bewafa", "judai", "tanha", "rona", "gham", "udaas", "udas")),
+            ("party", ("party", "dance", "dj", "club", "wedding", "shaadi", "dhol",
+                       "bhangra", "nach", "celebration", "club mix")),
+            ("romantic", ("romantic", "love song", "love songs", "ishq", "mohabbat",
+                          "pyaar", "pyar", "love")),
+            ("chill", ("chill", "lofi", "lo-fi", "relax", "calm", "acoustic")),
+            ("devotional", ("naat", "hamd", "nasheed", "bhajan", "qawwali", "devotional",
+                            "religious", "allah", "krishna")),
+        ]
+        for vibe, keywords in vibes:
+            if any(keyword in text for keyword in keywords):
+                return vibe
+        return "similar"
+
     async def find_autoplay_next(finished):
-        """Try several title/artist searches and public providers for autoplay."""
+        """Find a different follow-up with the same broad mood/vibe where possible."""
         title = str(finished.get("title") or "").strip()
         artist = str(finished.get("artist") or "").strip()
         if not title:
             return None
-        queries = []
-        if artist:
-            queries.extend([
-                f"ytsearch10:{artist} similar songs",
-                f"ytsearch10:{artist} {title} related tracks",
-                f"scsearch8:{artist} similar songs",
-            ])
-        queries.extend([
-            f"ytsearch10:{title} similar songs",
-            f"ytsearch10:{title} music mix",
-            f"scsearch8:{title} similar songs",
-        ])
+        vibe = autoplay_vibe(finished)
+        vibe_terms = {
+            "sad": "sad emotional heartbreak songs",
+            "party": "party dance upbeat hits",
+            "romantic": "romantic love songs",
+            "chill": "chill lofi relaxing songs",
+            "devotional": "devotional spiritual songs",
+            "similar": "similar songs same vibe",
+        }.get(vibe, "similar songs")
+        core = (artist + " " if artist else "") + title
+        queries = [
+            f"ytsearch10:{core} {vibe_terms}",
+            f"ytsearch10:{vibe_terms} like {core}",
+            f"scsearch8:{core} {vibe_terms}",
+        ]
         seen_titles = {title.casefold()}
         for query in queries:
             try:
@@ -649,6 +684,8 @@ def register_handlers(bot, calls, state, user_client=None):
                 candidate["autoplay"] = True
                 candidate["requested_by_id"] = finished.get("requested_by_id")
                 candidate["requested_by_name"] = finished.get("requested_by_name")
+                candidate["requested_query"] = finished.get("requested_query", "")
+                candidate["autoplay_vibe"] = vibe
                 return candidate
             except Exception as exc:
                 logging.warning("Autoplay query failed (%s): %s", query, str(exc)[:200])
@@ -665,6 +702,8 @@ def register_handlers(bot, calls, state, user_client=None):
                 candidate["autoplay"] = True
                 candidate["requested_by_id"] = finished.get("requested_by_id")
                 candidate["requested_by_name"] = finished.get("requested_by_name")
+                candidate["requested_query"] = finished.get("requested_query", "")
+                candidate["autoplay_vibe"] = vibe
                 return candidate
             except Exception as exc:
                 logging.warning("Autoplay %s fallback failed: %s", source_name, str(exc)[:200])
@@ -691,24 +730,14 @@ def register_handlers(bot, calls, state, user_client=None):
         if next_item:
             try:
                 if finished:
-                    next_item["player_message_id"] = finished.get("player_message_id")
+                    next_item["requested_query"] = next_item.get(
+                        "requested_query", finished.get("requested_query", ""))
                 await start_item(chat_id, next_item)
                 logging.info("Auto-advanced playback in %s to %s", chat_id, next_item["title"])
-                player_id = next_item.get("player_message_id")
-                try:
-                    if player_id:
-                        await bot.edit_message_text(
-                            chat_id, player_id, player_text(next_item),
-                            reply_markup=player_keyboard(chat_id)
-                        )
-                    else:
-                        sent = await bot.send_message(
-                            chat_id, player_text(next_item),
-                            reply_markup=player_keyboard(chat_id)
-                        )
-                        next_item["player_message_id"] = sent.id
-                except Exception:
-                    logging.exception("Could not refresh player UI for next track")
+                await publish_player_ui(
+                    chat_id, next_item, finished,
+                    "✅ Finished: " + str((finished or {}).get("title", "previous track"))
+                )
             except Exception as exc:
                 logging.exception("Could not auto-advance playback in %s", chat_id)
                 CURRENT.pop(chat_id, None)
@@ -1280,6 +1309,8 @@ def register_handlers(bot, calls, state, user_client=None):
             if spotify_items:
                 item["spotify_link"] = True
                 item["source"] = item.get("source") or "Spotify match"
+            item["requested_query"] = raw_query
+            item["autoplay_vibe"] = autoplay_vibe(item)
             if m.from_user:
                 item["requested_by_id"] = m.from_user.id
                 item["requested_by_name"] = (m.from_user.first_name or "Group member")
@@ -1586,19 +1617,26 @@ def register_handlers(bot, calls, state, user_client=None):
             if old.get("path"):
                 Path(old["path"]).unlink(missing_ok=True)
             return await reply(m, "⏭ Skipped. Queue is empty, so playback stopped.")
-        nxt = queued.pop(0)
-        nxt["player_message_id"] = old.get("player_message_id")
+        nxt = queued.pop(0) if queued else None
+        if nxt is None and AUTOPLAY.get(cid, False):
+            nxt = await find_autoplay_next(old)
+        if nxt is None:
+            try:
+                await calls.leave_call(cid)
+            except Exception:
+                pass
+            CURRENT.pop(cid, None)
+            if old.get("path"):
+                Path(old["path"]).unlink(missing_ok=True)
+            await finish_player_ui(cid, old, "⏹ Queue empty; playback stopped.")
+            return await reply(m, "⏭ Queue is empty; no related autoplay track was found.")
         try:
             await calls.leave_call(cid)
             CURRENT.pop(cid, None)
             await start_item(cid, nxt)
             if old.get("path") and old.get("path") != nxt.get("path"):
                 Path(old["path"]).unlink(missing_ok=True)
-            if nxt.get("player_message_id"):
-                await bot.edit_message_text(
-                    cid, nxt["player_message_id"], player_text(nxt),
-                    reply_markup=player_keyboard(cid)
-                )
+            await publish_player_ui(cid, nxt, old, "⏭️ Previous track skipped.")
             await reply(m, f"⏭ Skipped to **{nxt.get('title', 'next track')}**.")
         except Exception as e:
             logging.exception("Direct /skip failed")
