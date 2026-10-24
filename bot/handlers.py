@@ -142,7 +142,7 @@ def register_handlers(bot, calls, state):
             logging.exception("Failed to record group activity")
 
     async def change_group_logging(m, enabled):
-        if !is_group_chat(m) or not m.from_user:
+        if not is_group_chat(m) or not m.from_user:
             return await reply(m, "Use this command in the group.")
         try:
             member = await bot.get_chat_member(m.chat.id, m.from_user.id)
@@ -231,25 +231,32 @@ def register_handlers(bot, calls, state):
         return ("🎶 **MEMBER COMMANDS**\n/voteskip — Vote to skip the current track\n"
                 "/ping — Check bot status\n/settings — View music settings\n/help — Show commands")
 
-    @bot.on_message(filters.command("start"))
+    @bot.on_message(filters.command("start") & (filters.private | filters.group))
     async def start(_, m):
-        if m.from_user and m.from_user.id not in state["users"]:
-            state["users"].append(m.from_user.id)
-        me = await bot.get_me()
-        caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\n"
-                   "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\n\n"
-                   "🎵 Smooth playback • Smart controls\n"
-                   "🗳️ Community vote-to-skip • Group permissions\n\n"
-                   "➕ Add Alexa to your group, start a voice chat, and enjoy!")
-        markup = start_keyboard(me.username)
-        photo_url = os.getenv("START_IMAGE_URL", "").strip()
         try:
+            if m.from_user and m.from_user.id not in state["users"]:
+                state["users"].append(m.from_user.id)
+            me = await bot.get_me()
+            caption = ("🎧 **𝑨𝑳𝑬𝑿𝑨 𝟎.𝟐 𝑴𝑼𝑺𝑰𝑪**\n"
+                       "✨ 𝑷𝒓𝒆𝒎𝒊𝒖𝒎 𝑽𝒊𝒃𝒆 • 𝑭𝒓𝒆𝒆 𝑴𝒖𝒔𝒊𝒄 ✨\n\n"
+                       "🎵 Smooth playback • Smart controls\n"
+                       "🗳️ Community vote-to-skip • Group permissions\n\n"
+                       "➕ Add Alexa to your group, start a voice chat, and enjoy!")
+            markup = start_keyboard(me.username or "")
+            photo_url = os.getenv("START_IMAGE_URL", "").strip()
             if photo_url:
-                await bot.send_photo(m.chat.id, photo=photo_url, caption=caption, reply_markup=markup)
-            else:
-                await reply(m, caption, reply_markup=markup)
-        except Exception:
+                try:
+                    await bot.send_photo(m.chat.id, photo=photo_url, caption=caption, reply_markup=markup)
+                    return
+                except Exception:
+                    logging.exception("START_IMAGE_URL failed; falling back to text")
             await reply(m, caption, reply_markup=markup)
+        except Exception:
+            logging.exception("Start command failed in chat %s", getattr(m.chat, "id", "unknown"))
+            try:
+                await reply(m, "🎧 Alexa Music is online. Use /help to see commands.")
+            except Exception:
+                logging.exception("Could not send /start fallback response")
 
     @bot.on_message(filters.command("help"))
     async def help_cmd(_, m):
@@ -303,7 +310,7 @@ def register_handlers(bot, calls, state):
             await reply(m, "❌ Reload failed: " + str(e)[:180])
 
     async def manage_auth(m, authorize):
-        if !is_group_chat(m) or not m.from_user:
+        if not is_group_chat(m) or not m.from_user:
             return await reply(m, "Use /auth or /unauth in the group.")
         try:
             member = await bot.get_chat_member(m.chat.id, m.from_user.id)
@@ -344,7 +351,7 @@ def register_handlers(bot, calls, state):
         # owner/admins can control playback.
         if m.from_user and m.from_user.id == state["owner_id"]:
             return True
-        if !is_group_chat(m) or not m.from_user:
+        if not is_group_chat(m) or not m.from_user:
             await reply(m, "Use this command in a group.")
             return False
         try:
@@ -364,7 +371,7 @@ def register_handlers(bot, calls, state):
             return False
 
     async def request(m, video):
-        if !is_group_chat(m):
+        if not is_group_chat(m):
             return await reply(m, "Use this command in a group.")
         if m.chat.id not in state["groups"]:
             state["groups"].append(m.chat.id)
