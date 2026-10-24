@@ -683,6 +683,48 @@ def register_handlers(bot, calls, state, user_client=None):
                 logging.warning("Autoplay %s fallback failed: %s", source_name, str(exc)[:200])
         return None
 
+    async def start_item(chat_id, item):
+        """Start downloaded media in the Telegram voice chat without changing its pitch or speed."""
+        media_path = Path(str(item.get("path") or ""))
+        if not media_path.is_file() or media_path.stat().st_size == 0:
+            raise RuntimeError("The downloaded audio file is missing or empty. Try another song/source.")
+
+        # Let FFmpeg/PyTgCalls decode the original file normally. No tempo, pitch,
+        # or voice effects are applied; Studio quality asks for high-quality PCM.
+        if item.get("video"):
+            stream = MediaStream(
+                str(media_path),
+                AudioQuality.STUDIO,
+                VideoQuality.HD_720p
+            )
+        else:
+            stream = MediaStream(str(media_path), AudioQuality.STUDIO)
+
+        try:
+            await calls.play(chat_id, stream)
+        except Exception as first_exc:
+            # A stale call state can prevent play(). Rejoin once, then report a
+            # useful error to the existing /play error handler if it still fails.
+            logging.warning("First voice-chat play attempt failed in %s: %s",
+                            chat_id, str(first_exc)[:220])
+            try:
+                await calls.leave_call(chat_id)
+            except Exception:
+                pass
+            try:
+                await calls.play(chat_id, stream)
+            except Exception as retry_exc:
+                raise RuntimeError(
+                    "Could not start audio in the group voice chat. Confirm a voice chat is active, "
+                    "the session account has joined the group, and FFmpeg is installed. "
+                    + str(retry_exc)[:180]
+                ) from retry_exc
+
+        item["chat_id"] = chat_id
+        CURRENT[chat_id] = item
+        logging.info("Started %s in voice chat %s (audio quality: Studio)",
+                     item.get("title", "unknown track"), chat_id)
+
     @calls.on_update(tgcall_filters.stream_end())
     async def handle_stream_end(_, update: StreamEnded):
         chat_id = update.chat_id
@@ -1318,6 +1360,7 @@ def register_handlers(bot, calls, state, user_client=None):
                     except Exception:
                         pass
                 asyncio.create_task(delete_queue_notice())
+                return
 
             previous = CURRENT.get(chat_id)
             if force:
