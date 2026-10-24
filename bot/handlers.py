@@ -1,4 +1,4 @@
-import asyncio, logging, os, re, time, shutil
+import asyncio, logging, os, re, time, shutil, urllib.request, urllib.parse, html
 from bot.version import VERSION, RELEASE_NAME
 from pathlib import Path
 import yt_dlp
@@ -25,6 +25,39 @@ def register_handlers(bot, calls, state, user_client=None):
         value = str(getattr(chat_type, "value", chat_type)).lower()
         value = value.rsplit(".", 1)[-1]
         return value in ("group", "supergroup")
+
+    async def bandcamp_fallback(search_term):
+        """Try public Bandcamp track/album pages after normal search providers fail."""
+        search_url = "https://bandcamp.com/search?q=" + urllib.parse.quote(search_term)
+        def find_bandcamp_urls():
+            request = urllib.request.Request(
+                search_url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; AlexaMusic/1.0)"}
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                page = response.read(2_000_000).decode("utf-8", "ignore")
+            found = re.findall(
+                r"""https?://[A-Za-z0-9_-]+\.bandcamp\.com/(?:track|album)/[^\s"'<>]+""",
+                html.unescape(page)
+            )
+            result = []
+            for url in found:
+                url = url.split("?")[0]
+                if url not in result:
+                    result.append(url)
+            return result[:6]
+        urls = await asyncio.to_thread(find_bandcamp_urls)
+        failures = []
+        for url in urls:
+            try:
+                return await fetch(url, False)
+            except Exception as exc:
+                failures.append(str(exc)[:120])
+                logging.warning("Bandcamp candidate failed (%s): %s", url, str(exc)[:180])
+        raise RuntimeError(
+            "Bandcamp search returned no playable track."
+            + ((" Details: " + " | ".join(failures[:2])) if failures else "")
+        )
 
     async def fetch(query, video):
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
@@ -56,11 +89,15 @@ def register_handlers(bot, calls, state, user_client=None):
                         except Exception as fallback_exc:
                             logging.warning("SoundCloud search failed for %r: %s",
                                             search_term, str(fallback_exc)[:500])
-                            raise RuntimeError(
-                                "Both search sources failed. YouTube: "
-                                + str(search_exc)[:170] + " | SoundCloud: "
-                                + str(fallback_exc)[:170]
-                            ) from fallback_exc
+                            try:
+                                return await bandcamp_fallback(search_term)
+                            except Exception as bandcamp_exc:
+                                logging.warning("Bandcamp search failed for %r: %s",
+                                                search_term, str(bandcamp_exc)[:300])
+                                raise RuntimeError(
+                                    "YouTube, SoundCloud and Bandcamp could not find a playable track. "
+                                    "Try adding the artist name or send a supported direct track URL."
+                                ) from bandcamp_exc
                     raise RuntimeError(
                         "Media search failed: " + str(search_exc)[:300]
                     ) from search_exc
@@ -72,10 +109,15 @@ def register_handlers(bot, calls, state, user_client=None):
                         except Exception as fallback_exc:
                             logging.warning("SoundCloud had no playable search result for %r: %s",
                                             search_term, str(fallback_exc)[:500])
-                            raise RuntimeError(
-                                "No YouTube results and SoundCloud failed: "
-                                + str(fallback_exc)[:250]
-                            ) from fallback_exc
+                            try:
+                                return await bandcamp_fallback(search_term)
+                            except Exception as bandcamp_exc:
+                                logging.warning("Bandcamp search failed for %r: %s",
+                                                search_term, str(bandcamp_exc)[:300])
+                                raise RuntimeError(
+                                    "YouTube returned no results and SoundCloud/Bandcamp had no playable match. "
+                                    "Try adding the artist name or send a supported direct track URL."
+                                ) from bandcamp_exc
                     raise ValueError("No playable search results were found on the selected source.")
                 # Rank results against the requested song title instead of trusting
                 # YouTube's first result blindly.
@@ -135,12 +177,16 @@ def register_handlers(bot, calls, state, user_client=None):
                     search_term = query.split(":", 1)[1].strip()
                     logging.warning("YouTube search candidates failed; trying SoundCloud fallback for %r", search_term)
                     try:
-                        return await fetch("scsearch5:" + search_term, False)
+                        return await fetch("scsearch10:" + search_term, False)
                     except Exception as fallback_exc:
                         logging.warning("SoundCloud fallback failed for %r: %s", search_term, str(fallback_exc)[:200])
+                    try:
+                        return await bandcamp_fallback(search_term)
+                    except Exception as bandcamp_exc:
+                        logging.warning("Bandcamp fallback failed for %r: %s", search_term, str(bandcamp_exc)[:200])
                     if "sign in to confirm" in combined or "not a bot" in combined:
-                        raise RuntimeError("YouTube blocked the search and SoundCloud had no playable match. Try a more specific song title or a direct audio URL.")
-                    raise RuntimeError("No playable match was found on YouTube or SoundCloud. Try adding the artist name, or use a direct audio URL.")
+                        raise RuntimeError("YouTube requires verification on this host, and SoundCloud/Bandcamp had no playable match. Try a more specific title or a supported direct track URL.")
+                    raise RuntimeError("No playable match was found on YouTube, SoundCloud or Bandcamp. Try adding the artist name or use a supported direct track URL.")
                 if "sign in to confirm" in combined or "not a bot" in combined:
                     raise RuntimeError("YouTube is requiring verification for this URL. Try another supported source or a direct audio URL.")
                 raise RuntimeError("Could not download this track. Try a more specific song title or a supported direct URL.")
@@ -177,6 +223,13 @@ def register_handlers(bot, calls, state, user_client=None):
             if any(term in lower for term in ("user_banned_in_channel", "banned", "kicked")):
                 raise RuntimeError(
                     "The SESSION_STRING account is banned/kicked from this group. Unban it and try again."
+                ) from join_exc
+            if any(term in lower for term in ("chat_admin_required", "not enough rights", "invite_users", "have no rights")):
+                raise RuntimeError(
+                    "🔐 **Invite permission is required for music playback.**\n\n"
+                    "Please make Alexa a group admin and enable **Invite Users / Add Members** permission. "
+                    "Alexa needs this permission to create a temporary invite link so the music assistant "
+                    "(SESSION_STRING account) can join the group voice chat. Then run /play SONG NAME again."
                 ) from join_exc
             if any(term in lower for term in ("invite_request_sent", "join request")):
                 raise RuntimeError(
@@ -215,11 +268,16 @@ def register_handlers(bot, calls, state, user_client=None):
         mode = "📺 VIDEO" if item.get("video") else "🎧 MUSIC"
         artist = item.get("artist")
         duration = format_duration(item.get("duration", 0))
-        return (f"🎵 **ALEXA MUSIC — NOW PLAYING**\n\n"
-                f"**{item.get('title', 'Unknown track')}**\n"
-                + (f"👤 {artist}\n" if artist else "")
-                + f"⏱ {duration}\n{mode}\n\n"
-                "Use the buttons below to control playback.")
+        source = "Bandcamp / SoundCloud / YouTube" if item.get("url") else "Audio stream"
+        return (f"🎶 **ALEXA MUSIC PLAYER**\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"▶️ **NOW PLAYING**\n\n"
+                f"🎵 **{item.get('title', 'Unknown track')}**\n"
+                + (f"🎤 {artist}\n" if artist else "")
+                + f"⏱️ {duration}   •   {mode}\n"
+                f"🌐 Source: {source}\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                "Use the controls below to manage playback.")
 
     def player_keyboard(chat_id):
         return InlineKeyboardMarkup([
@@ -772,6 +830,9 @@ def register_handlers(bot, calls, state, user_client=None):
             query = "ytsearch5:" + query
         status = await m.reply_text("🔎 Preparing media…")
         try:
+            # Check the session assistant's group access before downloading audio, so
+            # missing invite permissions are explained immediately.
+            await ensure_session_in_group(m.chat.id)
             item = await fetch(query, video)
             if item["duration"] > state["duration_limit"]:
                 Path(item["path"]).unlink(missing_ok=True)
@@ -793,7 +854,18 @@ def register_handlers(bot, calls, state, user_client=None):
                     logging.exception("Could not remove replaced track")
             await status.edit_text(player_text(item), reply_markup=player_keyboard(chat_id))
         except Exception as e:
-            error_text = "❌ Playback failed: " + str(e)[:220] + "\nCheck active voice chat, user session, FFmpeg and host compatibility."
+            detail = str(e)
+            if "invite permission is required" in detail.lower() or "could not auto-join" in detail.lower():
+                error_text = detail + "\n\nAfter granting the permission, retry: /play SONG NAME"
+            elif "sign in to confirm" in detail.lower() or "not a bot" in detail.lower():
+                error_text = (
+                    "❌ YouTube is refusing automated playback on this host. "
+                    "Alexa will try SoundCloud and Bandcamp automatically. "
+                    "If those sources also have no playable copy, try a supported direct track URL. "
+                    "This is a source-side restriction, not a group permission issue."
+                )
+            else:
+                error_text = "❌ Playback failed: " + detail[:220] + "\nCheck active voice chat, session account, FFmpeg and host compatibility."
             try:
                 await status.edit_text(error_text)
             except Exception:
