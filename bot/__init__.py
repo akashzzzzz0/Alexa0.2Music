@@ -1,1 +1,1 @@
-# ALEXA 0.2 Music package
+# ALEXA Music Bot V3.0.0 package
