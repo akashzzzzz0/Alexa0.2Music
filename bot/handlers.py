@@ -1545,17 +1545,10 @@ def register_handlers(bot, calls, state, user_client=None):
                 try:
                     await calls.leave_call(cid)
                     CURRENT.pop(cid, None)
-                    if old:
-                        next_item["player_message_id"] = old.get("player_message_id")
                     await start_item(cid, next_item)
                     if old and old.get("path") != next_item.get("path"):
                         Path(old["path"]).unlink(missing_ok=True)
-                    player_id = next_item.get("player_message_id")
-                    if player_id:
-                        await bot.edit_message_text(
-                            cid, player_id, player_text(next_item),
-                            reply_markup=player_keyboard(cid)
-                        )
+                    await publish_player_ui(cid, next_item, old, "⏭️ Skipped by group vote.")
                     await bot.edit_message_text(
                         cid, vote["message_id"],
                         f"✅ **Vote passed ({count}/4)!**\\n⏭ Skipped to: **{next_item.get('title', 'Next track')}**"
