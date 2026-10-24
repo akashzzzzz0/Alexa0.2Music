@@ -351,12 +351,24 @@ def register_handlers(bot, calls, state, user_client=None):
                 next_item = None
         if next_item:
             try:
+                if finished:
+                    next_item["player_message_id"] = finished.get("player_message_id")
                 await start_item(chat_id, next_item)
                 logging.info("Auto-advanced queue in %s to %s", chat_id, next_item["title"])
                 try:
-                    await bot.send_message(chat_id, "🎵 Now playing: **" + next_item["title"] + "**")
+                    player_id = next_item.get("player_message_id")
+                    if player_id:
+                        await bot.edit_message_text(
+                            chat_id, player_id, player_text(next_item),
+                            reply_markup=player_keyboard(chat_id)
+                        )
+                    else:
+                        await bot.send_message(
+                            chat_id, player_text(next_item),
+                            reply_markup=player_keyboard(chat_id)
+                        )
                 except Exception:
-                    logging.exception("Could not announce next track")
+                    logging.exception("Could not refresh player UI for next track")
             except Exception:
                 logging.exception("Could not auto-advance queue in %s", chat_id)
                 try:
