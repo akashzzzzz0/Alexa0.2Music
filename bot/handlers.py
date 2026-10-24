@@ -1256,7 +1256,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 requester_id = item.get("requested_by_id")
                 requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
                 playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
-                return await status.edit_text(f"➕ **Added to queue — position {position + 1 if CURRENT.get(chat_id) else position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
+                return await status.edit_text(f"➕ **Added to queue — position {position}**\\n🎵 {item['title']}" + requested_by + playlist_note)
             previous = CURRENT.get(chat_id)
             if force:
                 QUEUES.pop(chat_id, None)
