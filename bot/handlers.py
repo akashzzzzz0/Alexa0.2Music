@@ -826,7 +826,7 @@ def register_handlers(bot, calls, state):
 
     @bot.on_message(filters.command("owner") & owner)
     async def owner_panel(_, m):
-        await reply(m, "🛡️ **ALEXA 0.2 MUSIC — OWNER PANEL**\nChoose a section below. Only the configured owner can open this panel.", reply_markup=owner_keyboard())
+        await reply(m, f"🛡️ **ALEXA MUSIC V{VERSION} — OWNER PANEL**\nChoose a section below. Only the configured owner can open this panel.", reply_markup=owner_keyboard())
 
     @bot.on_callback_query(filters.regex(r"^own:"))
     async def owner_panel_callback(_, query):
