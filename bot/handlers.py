@@ -41,10 +41,33 @@ def register_handlers(bot, calls, state):
             # the entire /play request on the first blocked or removed video.
             search_mode = query.startswith(("ytsearch", "scsearch"))
             if search_mode:
-                search_info = await asyncio.to_thread(ydl.extract_info, query, download=False)
-                entries = [x for x in (search_info or {}).get("entries", []) if x]
+                try:
+                    search_info = await asyncio.to_thread(ydl.extract_info, query, download=False)
+                    entries = [x for x in (search_info or {}).get("entries", []) if x]
+                except Exception as search_exc:
+                    # A source can fail during search itself, before candidate-download
+                    # handling. For YouTube song-name searches, immediately try SoundCloud.
+                    if not video and query.startswith("ytsearch"):
+                        search_term = query.split(":", 1)[1].strip()
+                        logging.warning("YouTube search itself failed; trying SoundCloud for %r: %s",
+                                        search_term, str(search_exc)[:200])
+                        try:
+                            return await fetch("scsearch5:" + search_term, False)
+                        except Exception as fallback_exc:
+                            logging.warning("SoundCloud search fallback failed for %r: %s",
+                                            search_term, str(fallback_exc)[:200])
+                    raise RuntimeError(
+                        "Search failed on YouTube and SoundCloud. Try adding the artist name or a direct supported audio URL."
+                    ) from search_exc
                 if not entries:
-                    raise ValueError("No playable search results were found.")
+                    if not video and query.startswith("ytsearch"):
+                        search_term = query.split(":", 1)[1].strip()
+                        try:
+                            return await fetch("scsearch5:" + search_term, False)
+                        except Exception as fallback_exc:
+                            logging.warning("SoundCloud had no playable search result for %r: %s",
+                                            search_term, str(fallback_exc)[:200])
+                    raise ValueError("No playable search results were found on the selected sources.")
                 candidates = entries[:5]
             else:
                 candidates = [query]
