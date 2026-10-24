@@ -1392,44 +1392,6 @@ def register_handlers(bot, calls, state, user_client=None):
         except Exception as e:
             await reply(m, "Resume failed: " + str(e)[:140])
 
-    @bot.on_message(filters.command("skip") & filters.group)
-    async def skip_command(_, m):
-        # Admins and group members explicitly authorized with /auth can skip directly.
-        if not await music_admin_only(m):
-            return
-        cid = m.chat.id
-        old = CURRENT.get(cid)
-        if not old:
-            return await reply(m, "Nothing is playing right now.")
-        queued = QUEUES.get(cid, [])
-        VOTES.pop(cid, None)
-        if not queued:
-            try:
-                await calls.leave_call(cid)
-            except Exception:
-                pass
-            CURRENT.pop(cid, None)
-            if old.get("path"):
-                Path(old["path"]).unlink(missing_ok=True)
-            return await reply(m, "⏭ Skipped. Queue is empty, so playback stopped.")
-        nxt = queued.pop(0)
-        nxt["player_message_id"] = old.get("player_message_id")
-        try:
-            await calls.leave_call(cid)
-            CURRENT.pop(cid, None)
-            await start_item(cid, nxt)
-            if old.get("path") and old.get("path") != nxt.get("path"):
-                Path(old["path"]).unlink(missing_ok=True)
-            if nxt.get("player_message_id"):
-                await bot.edit_message_text(
-                    cid, nxt["player_message_id"], player_text(nxt),
-                    reply_markup=player_keyboard(cid)
-                )
-            await reply(m, f"⏭ Skipped to **{nxt.get('title', 'next track')}**.")
-        except Exception as exc:
-            logging.exception("Direct /skip failed")
-            await reply(m, "Skip failed: " + str(exc)[:140])
-
     # Group members can vote to skip; four distinct users are required per track.
     VOTES = {}
 
@@ -1563,19 +1525,40 @@ def register_handlers(bot, calls, state, user_client=None):
 
     @bot.on_message(filters.command("skip") & filters.group)
     async def skip(_, m):
+        # Group admins and users authorized with /auth can skip directly.
         if not await music_admin_only(m):
             return
         cid = m.chat.id
+        old = CURRENT.get(cid)
+        if not old:
+            return await reply(m, "Nothing is playing right now.")
+        VOTES.pop(cid, None)
+        queued = QUEUES.get(cid, [])
+        if not queued:
+            try:
+                await calls.leave_call(cid)
+            except Exception:
+                pass
+            CURRENT.pop(cid, None)
+            if old.get("path"):
+                Path(old["path"]).unlink(missing_ok=True)
+            return await reply(m, "⏭ Skipped. Queue is empty, so playback stopped.")
+        nxt = queued.pop(0)
+        nxt["player_message_id"] = old.get("player_message_id")
         try:
             await calls.leave_call(cid)
             CURRENT.pop(cid, None)
-            q = QUEUES.get(cid, [])
-            if q:
-                await start_item(cid, q.pop(0))
-                await reply(m, "⏭ Skipped to next track.")
-            else:
-                await reply(m, "⏭ Skipped. Queue is empty.")
+            await start_item(cid, nxt)
+            if old.get("path") and old.get("path") != nxt.get("path"):
+                Path(old["path"]).unlink(missing_ok=True)
+            if nxt.get("player_message_id"):
+                await bot.edit_message_text(
+                    cid, nxt["player_message_id"], player_text(nxt),
+                    reply_markup=player_keyboard(cid)
+                )
+            await reply(m, f"⏭ Skipped to **{nxt.get('title', 'next track')}**.")
         except Exception as e:
+            logging.exception("Direct /skip failed")
             await reply(m, "Skip failed: " + str(e)[:140])
 
     @bot.on_message(filters.command("stop") & filters.group)
