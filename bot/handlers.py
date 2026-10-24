@@ -352,7 +352,7 @@ def register_handlers(bot, calls, state):
                 me = await bot.get_me()
                 await reply(
                     m,
-                    "🎧 **ALEXA 0.2 MUSIC**\\nWelcome! Add Alexa to a group, start a voice chat, and use /play SONG.\\n\\nUse /help for commands.",
+                    f"🎧 **ALEXA MUSIC V{VERSION}**\nWelcome! Add Alexa to a group, start a voice chat, and use /play SONG.\n\nUse /help for commands.",
                     reply_markup=start_keyboard(me.username or "")
                 )
             except Exception:
