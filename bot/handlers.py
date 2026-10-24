@@ -158,6 +158,7 @@ def register_handlers(bot, calls, state, user_client=None):
                             "artist": info.get("artist") or info.get("creator") or info.get("uploader"),
                             "duration": int(info.get("duration") or 0),
                             "url": info.get("webpage_url") or info.get("original_url"),
+                            "source": urllib.parse.urlparse(info.get("webpage_url") or info.get("original_url") or "").hostname or "Audio stream",
                             "path": path, "video": video}
                 except Exception as exc:
                     logging.warning("Media candidate failed (%s): %s", url, str(exc)[:240])
@@ -268,7 +269,7 @@ def register_handlers(bot, calls, state, user_client=None):
         mode = "📺 VIDEO" if item.get("video") else "🎧 MUSIC"
         artist = item.get("artist")
         duration = format_duration(item.get("duration", 0))
-        source = "Bandcamp / SoundCloud / YouTube" if item.get("url") else "Audio stream"
+        source = item.get("source") or "Audio stream"
         return (f"🎶 **ALEXA MUSIC PLAYER**\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"▶️ **NOW PLAYING**\n\n"
