@@ -14,6 +14,36 @@ QUEUES = {}
 CURRENT = {}
 AUTOPLAY = {}
 
+def cleanup_downloads(older_than_seconds=1800, force=False):
+    """Remove stale media/cache files while preserving every active or queued track."""
+    active_paths = set()
+    for item in CURRENT.values():
+        if isinstance(item, dict) and item.get("path"):
+            active_paths.add(os.path.abspath(str(item["path"])))
+    for items in QUEUES.values():
+        for item in items:
+            if isinstance(item, dict) and item.get("path"):
+                active_paths.add(os.path.abspath(str(item["path"])))
+
+    now = time.time()
+    removed = 0
+    for path in DIR.iterdir():
+        try:
+            if not path.is_file() or os.path.abspath(str(path)) in active_paths:
+                continue
+            if force or now - path.stat().st_mtime >= older_than_seconds:
+                path.unlink(missing_ok=True)
+                removed += 1
+        except OSError:
+            logging.warning("Could not auto-delete old music download %s", path, exc_info=True)
+    if removed:
+        logging.info("Auto-cleanup removed %s stale music download/cache file(s)", removed)
+    return removed
+
+# A restarted bot cannot resume the previous voice-call stream, so no old
+# downloaded track is needed at startup. Keep the downloads directory clean.
+cleanup_downloads(force=True)
+
 def register_handlers(bot, calls, state, user_client=None):
     owner = filters.user(state["owner_id"])
     async def reply(m, text, **kw):
@@ -190,6 +220,9 @@ def register_handlers(bot, calls, state, user_client=None):
                            ((" " + " | ".join(failures[:2])) if failures else ""))
 
     async def fetch(query, video):
+        # Remove orphaned downloads older than 30 minutes before starting another
+        # download; active and queued tracks are always protected.
+        cleanup_downloads(older_than_seconds=1800)
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
                 "format": "best[height<=720][ext=mp4]/best" if video else "bestaudio[acodec!=none]/bestaudio/best",
