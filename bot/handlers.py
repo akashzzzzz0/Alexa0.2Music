@@ -758,15 +758,40 @@ def register_handlers(bot, calls, state, user_client=None):
         logging.info("Started %s in voice chat %s (audio quality: Studio)",
                      item.get("title", "unknown track"), chat_id)
 
+    def delete_finished_track(item, chat_id=None):
+        """Immediately remove a completed track's local media and leftover fragments."""
+        if not isinstance(item, dict) or not item.get("path"):
+            return
+        media_path = Path(str(item["path"]))
+        target = os.path.abspath(str(media_path))
+
+        # A duplicate copy may be queued in another group or later in this group's queue.
+        # Keep the file only if another active/queued item references the exact same path.
+        for active_chat_id, active_item in CURRENT.items():
+            if active_chat_id != chat_id and isinstance(active_item, dict):
+                if active_item.get("path") and os.path.abspath(str(active_item["path"])) == target:
+                    return
+        for queued_items in QUEUES.values():
+            for queued_item in queued_items:
+                if isinstance(queued_item, dict) and queued_item.get("path"):
+                    if os.path.abspath(str(queued_item["path"])) == target:
+                        return
+
+        try:
+            media_path.unlink(missing_ok=True)
+            # yt-dlp may leave temporary fragments or metadata beside the media file.
+            for suffix in (".part", ".ytdl", ".temp"):
+                Path(str(media_path) + suffix).unlink(missing_ok=True)
+            logging.info("Deleted completed song from disk immediately: %s", media_path.name)
+        except OSError:
+            logging.exception("Could not immediately delete completed media file %s", media_path)
+
     @calls.on_update(tgcall_filters.stream_end())
     async def handle_stream_end(_, update: StreamEnded):
         chat_id = update.chat_id
         finished = CURRENT.pop(chat_id, None)
         if finished:
-            try:
-                Path(finished["path"]).unlink(missing_ok=True)
-            except OSError:
-                logging.exception("Could not remove finished media file")
+            delete_finished_track(finished, chat_id)
         next_items = QUEUES.get(chat_id, [])
         next_item = next_items.pop(0) if next_items else None
         was_autoplay = AUTOPLAY.get(chat_id, False)
