@@ -1427,13 +1427,23 @@ def register_handlers(bot, calls, state, user_client=None):
             if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
                 QUEUES[chat_id].extend(playlist_queue)
-                position = 1 + (1 if CURRENT.get(chat_id) else 0) + len(QUEUES[chat_id]) - len(playlist_queue) - 1
+                # Queue numbering starts at #1 for the first waiting track;
+                # the currently playing track is not counted as a queued item.
+                position = len(QUEUES[chat_id]) - len(playlist_queue)
                 await refresh_player_queue(chat_id)
                 requester_name = str(item.get("requested_by_name") or "Group member").replace("[", "(").replace("]", ")")
                 requester_id = item.get("requested_by_id")
-                requested_by = f"\\n👤 Requested by: [{requester_name}](tg://user?id={requester_id})" if requester_id else ""
-                playlist_note = f"\\n📃 Playlist tracks added: {len(playlist_queue)}" if playlist_queue else ""
-                await status.edit_text(f"➕ **Added to queue — position {position}**\n🎵 {item['title']}" + requested_by + playlist_note)
+                requested_by = f"[{requester_name}](tg://user?id={requester_id})" if requester_id else requester_name
+                duration_text = format_duration(item.get("duration", 0))
+                queue_notice = (
+                    f"➲ 𝖠𝖽𝖽𝖾𝖽 𝖳𝗈 𝖰𝗎𝖾𝗎𝖾 𝖠𝗍 #{position}\\n\\n"
+                    f"‣ 𝖳𝗂𝗍𝗅𝖾 : {item.get('title', 'Unknown track')}\\n"
+                    f"‣ 𝖣𝗎𝗋𝖺𝗍𝗂𝗈𝗇 : {duration_text} 𝖬𝗂𝗇𝗎𝗍𝖾𝗌\\n"
+                    f"‣ 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒 : {requested_by}"
+                )
+                if playlist_queue:
+                    queue_notice += f"\\n\\n📃 Playlist tracks added: {len(playlist_queue)}"
+                await status.edit_text(queue_notice)
                 async def delete_queue_notice():
                     await asyncio.sleep(8)
                     try:
