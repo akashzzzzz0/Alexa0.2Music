@@ -827,6 +827,7 @@ def register_handlers(bot, calls, state, user_client=None):
                 ) from retry_exc
 
         item["chat_id"] = chat_id
+        item["started_at"] = time.time()
         CURRENT[chat_id] = item
         logging.info("Started %s in voice chat %s (audio quality: Studio)",
                      item.get("title", "unknown track"), chat_id)
@@ -1476,6 +1477,27 @@ def register_handlers(bot, calls, state, user_client=None):
                         Path(queued_item["path"]).unlink(missing_ok=True)
                 return await status.edit_text("This track exceeds the configured duration limit.")
             chat_id = m.chat.id
+            # Recover if PyTgCalls missed a StreamEnded event: otherwise a finished
+            # song can remain in CURRENT forever and every new request is only queued.
+            stale_current = CURRENT.get(chat_id)
+            if stale_current and not force:
+                started_at = stale_current.get("started_at")
+                duration = max(0, int(stale_current.get("duration") or 0))
+                if started_at and time.time() > started_at + duration + 20:
+                    logging.warning(
+                        "Recovering stale playback state in %s for %s (duration=%ss)",
+                        chat_id, stale_current.get("title", "unknown track"), duration
+                    )
+                    try:
+                        await finish_player_ui(chat_id, stale_current, "⚠️ Previous stream ended; recovering playback.")
+                    except Exception:
+                        logging.debug("Could not finish stale player UI", exc_info=True)
+                    try:
+                        await calls.leave_call(chat_id)
+                    except Exception:
+                        logging.debug("Could not reset stale voice call", exc_info=True)
+                    CURRENT.pop(chat_id, None)
+                    delete_finished_track(stale_current, chat_id)
             if chat_id in CURRENT and not force:
                 QUEUES.setdefault(chat_id, []).append(item)
                 QUEUES[chat_id].extend(playlist_queue)
