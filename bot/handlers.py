@@ -109,6 +109,18 @@ def register_handlers(bot, calls, state, user_client=None):
             raise RuntimeError("Audius search unavailable: " + str(exc)[:120]) from exc
         failures = []
         for url in urls[:5]:
+            # Audius API can return a relative permalink ("/artist/track") rather
+            # than an absolute URL. yt-dlp rejects relative paths as invalid URLs.
+            if isinstance(url, str):
+                url = url.strip()
+                if url.startswith("//"):
+                    url = "https:" + url
+                elif url.startswith("/"):
+                    url = "https://audius.co" + url
+                elif url and not urllib.parse.urlparse(url).scheme:
+                    url = "https://audius.co/" + url.lstrip("/")
+            if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                continue
             try:
                 return await fetch(url, False)
             except Exception as exc:
@@ -165,53 +177,93 @@ def register_handlers(bot, calls, state, user_client=None):
                            ((" " + " | ".join(failures[:2])) if failures else ""))
 
     async def jiosaavn_fallback(search_term):
-        """Search JioSaavn's public catalog for Indian-language and lyric-based song queries."""
-        api_url = "https://saavn.dev/api/search/songs?" + urllib.parse.urlencode({
-            "query": search_term, "limit": 8
-        })
+        """Search JioSaavn-compatible public catalogs, tolerating API/DNS outages."""
+        query = urllib.parse.urlencode({"query": search_term, "limit": 8})
+        api_urls = (
+            "https://saavn.dev/api/search/songs?" + query,
+            "https://jio.shnwaz.dev/api/search/songs?" + query,
+        )
+
         def search_saavn():
-            request = urllib.request.Request(
-                api_url, headers={"User-Agent": "Mozilla/5.0 (compatible; AlexaMusic/1.0)"}
-            )
-            with urllib.request.urlopen(request, timeout=12) as response:
-                payload = __import__("json").loads(response.read(1_500_000).decode("utf-8", "ignore"))
-            data = payload.get("data", {}) if isinstance(payload, dict) else {}
-            results = data.get("results", []) if isinstance(data, dict) else []
-            return results if isinstance(results, list) else []
+            errors = []
+            for api_url in api_urls:
+                try:
+                    request = urllib.request.Request(
+                        api_url, headers={"User-Agent": "Mozilla/5.0 (compatible; AlexaMusic/1.0)"}
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        payload = __import__("json").loads(response.read(1_500_000).decode("utf-8", "ignore"))
+                    data = payload.get("data", {}) if isinstance(payload, dict) else {}
+                    if isinstance(data, list):
+                        results = data
+                    elif isinstance(data, dict):
+                        results = data.get("results") or data.get("songs") or data.get("data") or []
+                    else:
+                        results = []
+                    if not results and isinstance(payload, dict):
+                        results = payload.get("results") or payload.get("songs") or []
+                    if isinstance(results, list) and results:
+                        return results
+                    errors.append(api_url.split("/")[2] + ": no results")
+                except Exception as exc:
+                    errors.append(api_url.split("/")[2] + ": " + str(exc)[:100])
+            raise RuntimeError("; ".join(errors[:2]) or "all JioSaavn-compatible APIs unavailable")
+
         try:
             results = await asyncio.to_thread(search_saavn)
         except Exception as exc:
-            raise RuntimeError("JioSaavn search unavailable: " + str(exc)[:120]) from exc
+            raise RuntimeError("JioSaavn search unavailable: " + str(exc)[:180]) from exc
+
         wanted = set(re.findall(r"[a-z0-9]+", search_term.lower()))
         def score(track):
             title = str(track.get("name") or track.get("title") or "").lower()
             artists = track.get("artists") or {}
-            artist_text = " ".join(
-                str(x.get("name") or "") for key in ("primary", "featured", "all")
-                for x in (artists.get(key, []) if isinstance(artists, dict) else [])
-                if isinstance(x, dict)
-            )
+            if isinstance(artists, dict):
+                artist_items = []
+                for key in ("primary", "featured", "all"):
+                    values = artists.get(key, [])
+                    if isinstance(values, list):
+                        artist_items.extend(x for x in values if isinstance(x, dict))
+                artist_text = " ".join(str(x.get("name") or "") for x in artist_items)
+            elif isinstance(artists, list):
+                artist_text = " ".join(str(x.get("name") or "") for x in artists if isinstance(x, dict))
+            else:
+                artist_text = str(track.get("artist") or "")
             words = set(re.findall(r"[a-z0-9]+", title + " " + artist_text.lower()))
             overlap = len(wanted & words) / max(1, len(wanted))
             ratio = difflib.SequenceMatcher(None, search_term.lower(), title).ratio()
             return overlap * 0.75 + ratio * 0.25
+
         results.sort(key=score, reverse=True)
         failures = []
         for track in results[:8]:
-            urls = track.get("downloadUrl") or track.get("download_url") or []
-            if isinstance(urls, dict):
-                urls = list(urls.values())
-            urls = sorted(
-                [x for x in urls if isinstance(x, dict) and x.get("url")],
-                key=lambda x: int(re.sub(r"\\D", "", str(x.get("quality") or "0")) or 0),
+            urls = (track.get("downloadUrl") or track.get("download_url")
+                    or track.get("streamingUrls") or track.get("streamUrls") or [])
+            if isinstance(urls, str):
+                urls = [{"url": urls}]
+            elif isinstance(urls, dict):
+                # Some APIs return a single URL object; others return quality-keyed objects.
+                if urls.get("url"):
+                    urls = [urls]
+                else:
+                    urls = list(urls.values())
+            urls = [x if isinstance(x, dict) else {"url": x} for x in urls]
+            urls = [x for x in urls if isinstance(x.get("url"), str)
+                    and x["url"].startswith(("https://", "http://"))]
+            urls.sort(
+                key=lambda x: int(re.sub(r"\D", "", str(x.get("quality") or x.get("bitrate") or "0")) or 0),
                 reverse=True
             )
-            for entry in urls[:3]:
+            if track.get("url") and isinstance(track.get("url"), str) and track["url"].startswith(("https://", "http://")):
+                urls.append({"url": track["url"], "quality": "0"})
+            for entry in urls[:4]:
                 try:
                     item = await fetch(entry["url"], False)
                     item["title"] = track.get("name") or track.get("title") or item.get("title")
                     album = track.get("album") or {}
-                    item["artist"] = item.get("artist") or (album.get("name") if isinstance(album, dict) else None)
+                    item["artist"] = item.get("artist") or (
+                        album.get("name") if isinstance(album, dict) else track.get("artist")
+                    ) or track.get("artist")
                     item["source"] = "JioSaavn"
                     return item
                 except Exception as exc:
