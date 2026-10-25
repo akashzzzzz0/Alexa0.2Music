@@ -235,7 +235,7 @@ def register_handlers(bot, calls, state, user_client=None):
                             raise RuntimeError(
                                 "YouTube, SoundCloud, JioSaavn, Bandcamp, Audius and Internet Archive had no playable match. "
                                 "Try adding the artist name or a supported direct track URL."
-                            ) from bandcamp_exc
+                            )
                     raise RuntimeError(
                         "Media search failed: " + str(search_exc)[:300]
                     ) from search_exc
@@ -263,7 +263,7 @@ def register_handlers(bot, calls, state, user_client=None):
                             raise RuntimeError(
                                 "YouTube returned no playable results; SoundCloud, Bandcamp, Audius and Internet Archive "
                                 "also had no playable match. Try adding the artist name or a supported direct track URL."
-                            ) from bandcamp_exc
+                            )
                     raise ValueError("No playable search results were found on the selected source.")
                 # Rank results against the requested song title instead of trusting
                 # YouTube's first result blindly.
@@ -1058,6 +1058,8 @@ def register_handlers(bot, calls, state, user_client=None):
 
     @bot.on_message(filters.command("settings"))
     async def settings(_, m):
+        if not await music_admin_only(m):
+            return
         await reply(m, "⚙️ Duration limit: " + str(state["duration_limit"]) + " seconds. All features are free.")
 
     @bot.on_message(filters.command("reload") & (filters.group | filters.private))
@@ -1411,8 +1413,9 @@ def register_handlers(bot, calls, state, user_client=None):
 
     @bot.on_message(filters.command("play") & filters.group)
     async def play(_, m):
-        if await music_admin_only(m):
-            await request(m, False)
+        # Playing a song is open to every group member; privileged controls
+        # remain protected by music_admin_only and the /auth system.
+        await request(m, False)
 
     @bot.on_message(filters.command("play") & filters.private)
     async def play_private(_, m):
@@ -1651,22 +1654,11 @@ def register_handlers(bot, calls, state, user_client=None):
             except Exception:
                 return await reply(m, "Could not verify your group permissions. Please try again.")
         if not can_skip_directly:
-            vote = VOTES.get(cid)
-            if vote and vote.get("track_path") == old.get("path"):
-                return await reply(m, "🗳️ A vote is already active below. Tap its button to vote.")
-            msg = await bot.send_message(
-                cid,
-                f"🗳️ **Skip vote requested**\nTrack: **{old.get('title', 'Now playing')}**\n"
-                "Four different members must vote. Tap below to cast your vote.",
-                reply_markup=vote_keyboard(cid, 0)
+            return await reply(
+                m,
+                "⛔ Direct /skip is for group admins and users authorized with /auth. "
+                "Regular members can use /voteskip to start a group vote."
             )
-            VOTES[cid] = {
-                "voters": set(),
-                "message_id": msg.id,
-                "track_path": old.get("path"),
-                "track_title": old.get("title")
-            }
-            return
         VOTES.pop(cid, None)
         queued = QUEUES.get(cid, [])
         nxt = queued.pop(0) if queued else None
