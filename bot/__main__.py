@@ -1,4 +1,25 @@
-import asyncio, logging, os, shutil
+import asyncio, logging, os, shutil, glob
+from pathlib import Path
+
+# Keep free-host disk usage low: remove the obsolete Deno runtime left by
+# older deployments (it is no longer a requirement) and pip's downloaded cache.
+def cleanup_obsolete_runtime():
+    base = Path(__file__).resolve().parent.parent
+    for pattern in (
+        str(base / ".local" / "lib" / "python*" / "site-packages" / "deno"),
+        str(base / ".local" / "lib" / "python*" / "site-packages" / "deno-*.dist-info"),
+    ):
+        for target in glob.glob(pattern):
+            shutil.rmtree(target, ignore_errors=True)
+    deno_bin = base / ".local" / "bin" / "deno"
+    try:
+        deno_bin.unlink(missing_ok=True)
+    except OSError:
+        pass
+    shutil.rmtree(Path.home() / ".cache" / "pip", ignore_errors=True)
+
+cleanup_obsolete_runtime()
+
 from dotenv import load_dotenv
 from pyrogram import Client
 from pyrogram.types import (BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats, BotCommandScopeAllChatAdministrators, BotCommandScopeChat)
