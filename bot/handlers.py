@@ -223,14 +223,35 @@ def register_handlers(bot, calls, state, user_client=None):
         # Remove orphaned downloads older than 30 minutes before starting another
         # download; active and queued tracks are always protected.
         cleanup_downloads(older_than_seconds=1800)
+        # Full YouTube extraction needs yt-dlp-ejs plus a supported JavaScript
+        # runtime. Prefer Deno, then Node/QuickJS when the host provides one.
+        runtime_path = shutil.which("deno") or shutil.which("node") or shutil.which("qjs")
+        js_runtimes = {}
+        if runtime_path:
+            runtime_name = Path(runtime_path).name.lower()
+            runtime_name = "deno" if runtime_name.startswith("deno") else (
+                "node" if runtime_name.startswith("node") else "quickjs"
+            )
+            js_runtimes[runtime_name] = {"path": runtime_path}
+
         opts = {"outtmpl": str(DIR / "%(id)s.%(ext)s"), "noplaylist": True,
                 "quiet": True, "no_warnings": True,
                 "format": "best[height<=720][ext=mp4]/best" if video else "bestaudio[acodec!=none]/bestaudio/best",
+                "remote_components": ["ejs:github"],
                 "concurrent_fragment_downloads": 4,
                 "retries": 3,
                 "fragment_retries": 5,
                 "file_access_retries": 3,
                 "ignoreerrors": False}
+        if js_runtimes:
+            opts["js_runtimes"] = js_runtimes
+        # Optional private cookies can help when YouTube challenges this host.
+        # Never commit cookies: configure YOUTUBE_COOKIES_FILE in the hosting panel.
+        cookies_file = os.getenv("YOUTUBE_COOKIES_FILE", "").strip()
+        if cookies_file and Path(cookies_file).is_file():
+            opts["cookiefile"] = cookies_file
+        logging.info("YouTube extraction setup: runtime=%s, EJS remote fallback enabled, cookies=%s",
+                     next(iter(js_runtimes), "not found"), bool(opts.get("cookiefile")))
         with yt_dlp.YoutubeDL(opts) as ydl:
             # Resolve search results first, then download one candidate at a time.
             # If a result is unavailable, try the next result rather than failing
