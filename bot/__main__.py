@@ -1,4 +1,4 @@
-import asyncio, logging, os, shutil, glob, tarfile, urllib.request
+import asyncio, logging, os, shutil, glob, tarfile, urllib.request, hashlib
 from pathlib import Path
 
 # Keep free-host disk usage low: remove the obsolete Deno runtime left by
@@ -40,7 +40,6 @@ def ensure_temporary_node_runtime():
     runtime_root = Path("/tmp/alexa-node-runtime")
     node_bin = runtime_root / "bin" / "node"
     archive_path = Path("/tmp") / archive_name
-    sums_path = Path("/tmp") / f"node-{version}-SHASUMS256.txt"
 
     try:
         if not (node_bin.is_file() and os.access(node_bin, os.X_OK)):
@@ -60,7 +59,7 @@ def ensure_temporary_node_runtime():
                     break
             if not expected:
                 raise RuntimeError("Node.js archive checksum was not found")
-            digest = __import__("hashlib").sha256()
+            digest = hashlib.sha256()
             with archive_path.open("rb") as source:
                 for chunk in iter(lambda: source.read(1024 * 1024), b""):
                     digest.update(chunk)
@@ -86,7 +85,6 @@ def ensure_temporary_node_runtime():
         logging.warning("Could not prepare temporary Node.js runtime; continuing without it: %s", str(exc)[:240])
     finally:
         archive_path.unlink(missing_ok=True)
-        sums_path.unlink(missing_ok=True)
 
 ensure_temporary_node_runtime()
 
