@@ -1436,13 +1436,13 @@ def register_handlers(bot, calls, state, user_client=None):
                 requested_by = f"[{requester_name}](tg://user?id={requester_id})" if requester_id else requester_name
                 duration_text = format_duration(item.get("duration", 0))
                 queue_notice = (
-                    f"➲ 𝖠𝖽𝖽𝖾𝖽 𝖳𝗈 𝖰𝗎𝖾𝗎𝖾 𝖠𝗍 #{position}\\n\\n"
-                    f"‣ 𝖳𝗂𝗍𝗅𝖾 : {item.get('title', 'Unknown track')}\\n"
-                    f"‣ 𝖣𝗎𝗋𝖺𝗍𝗂𝗈𝗇 : {duration_text} 𝖬𝗂𝗇𝗎𝗍𝖾𝗌\\n"
+                    f"➲ 𝖠𝖽𝖽𝖾𝖽 𝖳𝗈 𝖰𝗎𝖾𝗎𝖾 𝖠𝗍 #{position}\n\n"
+                    f"‣ 𝖳𝗂𝗍𝗅𝖾 : {item.get('title', 'Unknown track')}\n"
+                    f"‣ 𝖣𝗎𝗋𝖺𝗍𝗂𝗈𝗇 : {duration_text} 𝖬𝗂𝗇𝗎𝗍𝖾𝗌\n"
                     f"‣ 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒 : {requested_by}"
                 )
                 if playlist_queue:
-                    queue_notice += f"\\n\\n📃 Playlist tracks added: {len(playlist_queue)}"
+                    queue_notice += f"\n\n📃 Playlist tracks added: {len(playlist_queue)}"
                 await status.edit_text(queue_notice)
                 async def delete_queue_notice():
                     await asyncio.sleep(8)
