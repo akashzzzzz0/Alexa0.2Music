@@ -20,6 +20,76 @@ def cleanup_obsolete_runtime():
 
 cleanup_obsolete_runtime()
 
+# Bootstrap a temporary Node.js runtime for yt-dlp's supported YouTube EJS
+# challenge solver. Keep the runtime under /tmp so it does not consume the
+# host's small persistent disk quota. If the download is unavailable, Alexa
+# continues to start and existing non-YouTube sources remain usable.
+def ensure_temporary_node_runtime():
+    existing = shutil.which("node")
+    if existing:
+        logging.info("JavaScript runtime already available: node at %s", existing)
+        return
+    if os.uname().machine.lower() not in ("x86_64", "amd64"):
+        logging.warning("Temporary Node.js bootstrap skipped: unsupported architecture")
+        return
+
+    version = "v24.22.1"
+    archive_name = f"node-{version}-linux-x64.tar.xz"
+    archive_url = f"https://nodejs.org/dist/{version}/{archive_name}"
+    sums_url = f"https://nodejs.org/dist/{version}/SHASUMS256.txt"
+    runtime_root = Path("/tmp/alexa-node-runtime")
+    node_bin = runtime_root / "bin" / "node"
+    archive_path = Path("/tmp") / archive_name
+    sums_path = Path("/tmp") / f"node-{version}-SHASUMS256.txt"
+
+    try:
+        if not (node_bin.is_file() and os.access(node_bin, os.X_OK)):
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            request = urllib.request.Request(archive_url, headers={"User-Agent": "AlexaMusic-runtime-bootstrap/1.0"})
+            with urllib.request.urlopen(request, timeout=30) as response, archive_path.open("wb") as out:
+                shutil.copyfileobj(response, out)
+
+            request = urllib.request.Request(sums_url, headers={"User-Agent": "AlexaMusic-runtime-bootstrap/1.0"})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                sums_text = response.read(100_000).decode("ascii", "strict")
+            expected = None
+            for line in sums_text.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[-1].lstrip("*") == archive_name:
+                    expected = parts[0].lower()
+                    break
+            if not expected:
+                raise RuntimeError("Node.js archive checksum was not found")
+            digest = __import__("hashlib").sha256()
+            with archive_path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != expected:
+                raise RuntimeError("Node.js archive checksum mismatch")
+
+            # Python's tarfile/lzma support extracts just the Node executable;
+            # the host does not need the external xz command.
+            member_name = f"node-{version}-linux-x64/bin/node"
+            with tarfile.open(archive_path, mode="r:xz") as archive:
+                member = archive.getmember(member_name)
+                source = archive.extractfile(member)
+                if source is None:
+                    raise RuntimeError("Node.js executable missing from archive")
+                node_bin.parent.mkdir(parents=True, exist_ok=True)
+                with source, node_bin.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+            node_bin.chmod(0o755)
+
+        os.environ["PATH"] = str(node_bin.parent) + os.pathsep + os.environ.get("PATH", "")
+        logging.info("Temporary Node.js runtime ready: %s", node_bin)
+    except Exception as exc:
+        logging.warning("Could not prepare temporary Node.js runtime; continuing without it: %s", str(exc)[:240])
+    finally:
+        archive_path.unlink(missing_ok=True)
+        sums_path.unlink(missing_ok=True)
+
+ensure_temporary_node_runtime()
+
 from dotenv import load_dotenv
 from pyrogram import Client
 from pyrogram.types import (BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats, BotCommandScopeAllChatAdministrators, BotCommandScopeChat)
