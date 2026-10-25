@@ -4,4 +4,3 @@ py-tgcalls==2.2.11
 yt-dlp==2026.10.21
 python-dotenv>=1.0.1
 yt-dlp-ejs==0.8.0
-deno==2.9.5
