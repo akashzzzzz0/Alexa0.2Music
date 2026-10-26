@@ -1,6 +1,10 @@
-pyrogrammod>=2.4.1
+yt-dlp==2026.1.31
+pillow==12.1.0
+aiohttp==3.13.3
+aiofiles==25.1.0
 tgcrypto==1.2.5
-py-tgcalls==2.2.11
-yt-dlp==2026.10.21
-python-dotenv>=1.0.1
-yt-dlp-ejs==0.8.0
+py-tgcalls==2.2.10
+python-dotenv==1.2.1
+youtube-search-python==1.6.6
+httpx==0.27.2
+https://github.com/PyrogramMod/PyrogramMod/archive/refs/heads/main.zip
