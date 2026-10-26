@@ -1,0 +1,37 @@
+services:
+  bot:
+    build:
+      context: .
+      args:
+        # Set INSTALL_BROWSER=true in .env to bake in Chromium for the
+        # headless-browser fallback (JS-only players). Off by default.
+        INSTALL_BROWSER: ${INSTALL_BROWSER:-false}
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: '1'
+      # Custom extractor plugins (mounted below). Empty dir = none.
+      PLUGIN_DIR: /plugins
+    volumes:
+    - ./plugins:/plugins:ro
+    - downloads:/app/downloads
+    - ${LIBRARY_HOST_DIR:-/tmp}:/library:ro
+    - ${COOKIES_HOST_PATH:-/dev/null}:/cookies/cookies.txt
+    restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - test $$(( $$(date +%s) - $$(stat -c %Y /tmp/heartbeat 2>/dev/null || echo
+        0) )) -lt 120
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+    - botnet
+networks:
+  botnet:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
+volumes:
+  downloads: null

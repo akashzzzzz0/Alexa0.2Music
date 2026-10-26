@@ -1,6 +1,20 @@
-pyrogrammod>=2.4.1
-tgcrypto==1.2.5
-py-tgcalls==2.2.11
-yt-dlp==2026.10.21
-python-dotenv>=1.0.1
-yt-dlp-ejs==0.8.0
+tgcrypto
+ffmpeg-python
+py-tgcalls
+kurigram
+yt-dlp
+youtube-search-python==1.4.9
+youtube-search
+python-dotenv
+gitpython
+aiofiles
+aiohttp
+requests
+pillow
+psutil
+wget
+# extra stream resolvers: headless-browser fallback (Chromium itself is opt-in
+# via INSTALL_BROWSER), plus deps commonly needed by extractor plugins
+playwright
+curl_cffi
+pycryptodomex
