@@ -88,7 +88,7 @@ Docker-only — on Nix, point `PROXY_URL` at whatever proxy you run.
 | `SESSION_NAME` | ✅ | assistant session string (step 2) |
 | `SUDO_USERS` | ✅ | space-separated admin user ids |
 | `DURATION_LIMIT` | — | max track length (minutes) |
-| `DOWNLOADS_CACHE_LIMIT_MB` | — | downloads-cache cap in MB, pruned after each stream (default 4096; 0 = delete after playing) |
+| `DOWNLOADS_CACHE_LIMIT_MB` | — | downloads-cache cap in MB, pruned after each stream (default 128; 0 = delete after playing) |
 | `LIBRARY_HOST_DIR` / `LIBRARY_ROOT` / `LIBRARY_CATEGORIES` | — | local media library: host folder to mount read-only, the in-container path (`/library`), and an optional comma-separated category allowlist; leave unset to disable |
 | `RADIO_STATIONS` | — | override the built-in `/radio` presets (`Name=URL,Name=URL,…`) |
 | `RADIO_IMG` | — | card image shown while streaming radio (defaults to `IMG_1`) |
