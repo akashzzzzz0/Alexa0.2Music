@@ -1597,26 +1597,12 @@ def register_handlers(bot, calls, state, user_client=None):
                 await animation_task
             except asyncio.CancelledError:
                 pass
-            detail = str(e)
-            if "invite permission is required" in detail.lower() or "could not auto-join" in detail.lower():
-                error_text = detail + "\n\nAfter granting the permission, retry: /play SONG NAME"
-            elif "sign in to confirm" in detail.lower() or "not a bot" in detail.lower():
-                error_text = (
-                    "❌ YouTube is refusing automated playback on this host. "
-                    "Alexa will try SoundCloud and Bandcamp automatically. "
-                    "If those sources also have no playable copy, try a supported direct track URL. "
-                    "This is a source-side restriction, not a group permission issue."
-                )
-            else:
-                error_text = "❌ Playback failed: " + detail[:220] + "\nCheck active voice chat, session account, FFmpeg and host compatibility."
+            # Keep failed searches/play attempts silent in chat; details remain in host logs.
+            logging.warning("Silent /play failure in chat %s: %s", m.chat.id, str(e)[:300])
             try:
-                await status.edit_text(error_text)
+                await status.delete()
             except Exception:
-                logging.exception("Could not edit /play status message")
-                try:
-                    await reply(m, error_text)
-                except Exception:
-                    logging.exception("Could not send /play failure reply")
+                logging.debug("Could not remove failed /play status message", exc_info=True)
 
     @bot.on_message(filters.command("play") & filters.group)
     async def play(_, m):
