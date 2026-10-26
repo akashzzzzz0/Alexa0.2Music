@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import shutil
+from pathlib import Path
 
 # Libraries stay at WARNING (real problems still surface); our own packages log
 # at INFO so the concise call-lifecycle + startup lines show without lib spam.
@@ -15,6 +17,7 @@ from pyrogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandS
 from pyrogram.errors import FloodWait
 from driver.clients import call_py, bot
 from driver.queues import load_resume, load_topic_lock
+from driver.utils import prune_downloads
 from program.resume import track_position
 from program.radio import radio_updater
 import program.iptv  # registers /iptv handlers
@@ -68,6 +71,24 @@ async def heartbeat():
         await asyncio.sleep(30)
 
 
+async def cache_maintenance():
+    """Periodically prune old media and clear disposable installer/extractor caches."""
+    cache_root = Path.home() / ".cache"
+    for name in ("pip", "yt-dlp", "yt_dlp"):
+        path = cache_root / name
+        try:
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError as exc:
+            log.warning("could not clear %s cache: %s", name, exc)
+    while True:
+        try:
+            prune_downloads()
+        except Exception as exc:
+            log.warning("automatic download-cache cleanup failed: %s", exc)
+        await asyncio.sleep(600)
+
+
 async def start_bot():
     log.info("starting bot client")
     # If Telegram rate-limited the token login (e.g. after several restarts in
@@ -92,6 +113,7 @@ async def start_bot():
         log.warning("could not register bot commands: %s", e)
     load_resume()  # restore resume state so /continue survives restarts
     load_topic_lock()
+    asyncio.ensure_future(cache_maintenance())
     asyncio.ensure_future(heartbeat())
     asyncio.ensure_future(track_position())
     asyncio.ensure_future(radio_updater())
