@@ -4,7 +4,6 @@ py-tgcalls
 kurigram
 yt-dlp
 youtube-search-python==1.4.9
-youtube-search
 python-dotenv
 gitpython
 aiofiles
@@ -12,7 +11,6 @@ aiohttp
 requests
 pillow
 psutil
-wget
 # extra stream resolvers: headless-browser fallback (Chromium itself is opt-in
 # via INSTALL_BROWSER), plus deps commonly needed by extractor plugins
 playwright
