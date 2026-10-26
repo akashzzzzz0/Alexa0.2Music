@@ -393,7 +393,7 @@ def prune_downloads():
     files = []
     for name in os.listdir(folder):
         # never prune session files or the persisted resume state
-        if name.endswith((".session", ".session-journal")) or name == "resume.json":
+        if name.endswith((".session", ".session-journal")) or name in ("resume.json", "topic_locks.json"):
             continue
         path = os.path.join(folder, name)
         if os.path.isfile(path) and path not in used:
