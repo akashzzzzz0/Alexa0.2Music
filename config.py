@@ -2,17 +2,17 @@ import os
 from os import getenv
 from dotenv import load_dotenv
 
+if os.path.exists("local.env"):
+    load_dotenv("local.env")
+
+load_dotenv()
+
 if not os.getenv("SESSION_NAME") and os.getenv("SESSION_STRING"):
     os.environ["SESSION_NAME"] = os.getenv("SESSION_STRING", "")
 if not os.getenv("SUDO_USERS") and os.getenv("OWNER_ID"):
     os.environ["SUDO_USERS"] = os.getenv("OWNER_ID", "")
 if not os.getenv("BOT_NAME"):
     os.environ["BOT_NAME"] = "Alexa"
-
-if os.path.exists("local.env"):
-    load_dotenv("local.env")
-
-load_dotenv()
 
 # ---- fail fast on missing/invalid required config, with a clear message ----
 _REQUIRED = ("API_ID", "API_HASH", "BOT_TOKEN", "SESSION_NAME", "SUDO_USERS")
