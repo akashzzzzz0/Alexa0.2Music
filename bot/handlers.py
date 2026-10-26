@@ -832,6 +832,50 @@ def register_handlers(bot, calls, state, user_client=None):
         logging.info("Started %s in voice chat %s (audio quality: Studio)",
                      item.get("title", "unknown track"), chat_id)
 
+        # Fallback watchdog: some PyTgCalls versions miss StreamEnded updates.
+        # The identity check prevents it from interrupting a newer track.
+        async def _queue_watchdog():
+            duration = max(0, int(item.get("duration") or 0))
+            if duration <= 0:
+                return
+            await asyncio.sleep(duration + 8)
+            if CURRENT.get(chat_id) is not item:
+                return
+            logging.warning("Stream-end event was missed in %s; advancing queue", chat_id)
+            finished = CURRENT.pop(chat_id, None)
+            if finished:
+                delete_finished_track(finished, chat_id)
+            waiting = QUEUES.get(chat_id, [])
+            next_item = waiting.pop(0) if waiting else None
+            autoplay_enabled = AUTOPLAY.get(chat_id, False)
+            if next_item is None and autoplay_enabled and finished:
+                try:
+                    next_item = await find_autoplay_next(finished)
+                except Exception:
+                    logging.exception("Watchdog autoplay lookup failed in %s", chat_id)
+            if next_item:
+                try:
+                    await start_item(chat_id, next_item)
+                    await publish_player_ui(
+                        chat_id, next_item, finished,
+                        "✅ Finished: " + str((finished or {}).get("title", "previous track"))
+                    )
+                except Exception:
+                    logging.exception("Watchdog could not start next track in %s", chat_id)
+                    CURRENT.pop(chat_id, None)
+                    try:
+                        await calls.leave_call(chat_id)
+                    except Exception:
+                        pass
+            else:
+                QUEUES.pop(chat_id, None)
+                try:
+                    await calls.leave_call(chat_id)
+                except Exception:
+                    logging.debug("Watchdog could not leave ended voice chat", exc_info=True)
+
+        asyncio.create_task(_queue_watchdog())
+
     def delete_finished_track(item, chat_id=None):
         """Immediately remove a completed track's local media and leftover fragments."""
         if not isinstance(item, dict) or not item.get("path"):
