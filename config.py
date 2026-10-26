@@ -58,7 +58,7 @@ else:
     DURATION_LIMIT = max(1, _duration_raw // 60) if _duration_raw > 1440 else _duration_raw
 # Max size of the downloads cache in MB; pruned (oldest first) after each
 # stream ends. 0 = delete everything not queued as soon as a stream ends.
-DOWNLOADS_CACHE_LIMIT_MB = int(getenv("DOWNLOADS_CACHE_LIMIT_MB", "4096"))
+DOWNLOADS_CACHE_LIMIT_MB = int(getenv("DOWNLOADS_CACHE_LIMIT_MB", "128"))
 # Leave the voice chat after this many minutes with no human listeners. 0 = off.
 IDLE_LEAVE_MINUTES = int(getenv("IDLE_LEAVE_MINUTES", "10"))
 # Local media library root (in-container path; mount your host folder there).
