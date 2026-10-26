@@ -7,4 +7,5 @@ py-tgcalls==2.2.10
 python-dotenv==1.2.1
 youtube-search-python==1.6.6
 httpx==0.27.2
+spotipy>=2.25.1
 https://github.com/PyrogramMod/PyrogramMod/archive/refs/heads/main.zip
