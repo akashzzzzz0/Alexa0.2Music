@@ -2,6 +2,7 @@ tgcrypto
 ffmpeg-python
 py-tgcalls
 kurigram
+# Unpinned intentionally: clean installs should receive the current yt-dlp release.
 yt-dlp[default]
 youtube-search-python==1.4.9
 youtube-search
