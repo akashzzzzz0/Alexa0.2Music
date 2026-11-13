@@ -531,7 +531,7 @@ async def play(c: Client, m: Message):
         else:
             suhu = await c.send_message(chat_id, "🔍 **Searching...**", message_thread_id=thread_id)
             query = m.text.split(None, 1)[1]
-            search = ytsearch(query)
+            search = await asyncio.to_thread(ytsearch, query)
             if search == 0:
                 await suhu.edit("❌ **no results found.**")
             else:
