@@ -172,7 +172,7 @@ async def _soundcloud_search(query: str):
         proc = await asyncio.create_subprocess_exec(
             "yt-dlp", "--no-warnings", "--flat-playlist", "--playlist-items", "1",
             "--skip-download", "--print",
-            "%(title)s\\t%(webpage_url)s\\t%(duration_string)s\\t%(thumbnail)s",
+            "%(title)s|||%(webpage_url)s|||%(duration_string)s|||%(thumbnail)s",
             f"scsearch1:{query}",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
         )
@@ -180,7 +180,7 @@ async def _soundcloud_search(query: str):
         if proc.returncode != 0:
             return None
         line = out.decode(errors="ignore").strip().splitlines()[0]
-        parts = line.split("\\t")
+        parts = line.split("|||")
         if len(parts) < 2 or not parts[1].startswith("http"):
             return None
         return [parts[0] or query, parts[1], parts[2] if len(parts) > 2 else "", parts[3] if len(parts) > 3 else ""]
