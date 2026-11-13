@@ -8,7 +8,7 @@ youtube-search
 python-dotenv
 gitpython
 aiofiles
- aiohttp
+aiohttp
 requests
 pillow
 psutil
