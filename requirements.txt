@@ -2,7 +2,7 @@ tgcrypto
 ffmpeg-python
 py-tgcalls
 kurigram
-yt-dlp
+yt-dlp[default]
 youtube-search-python==1.4.9
 youtube-search
 python-dotenv
