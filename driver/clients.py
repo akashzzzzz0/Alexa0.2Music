@@ -1,8 +1,14 @@
 import os
+from pathlib import Path
 
 from config import API_HASH, API_ID, BOT_TOKEN, SESSION_NAME
 from pyrogram import Client
 from pytgcalls import PyTgCalls
+
+# Pyrogram stores the bot session database in this directory. Some hosts do
+# not preserve empty directories from the Git checkout, so create it before
+# constructing or starting the client.
+Path("downloads").mkdir(parents=True, exist_ok=True)
 
 # Optional proxy support (for networks where Telegram is filtered).
 # Set PROXY_HOST/PROXY_PORT in the env to enable; scheme defaults to socks5.
