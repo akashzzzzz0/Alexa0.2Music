@@ -74,7 +74,7 @@ def ytsearch(query: str):
     except Exception as e:
         log.warning("ytsearch failed: %s", e)
         if "q" in locals() and _YT_RE.match(q):
-            video_id = re.search(r"(?:youtu\\.be/|[?&]v=)([A-Za-z0-9_-]{11})", q)
+            video_id = re.search(r"(?:youtu\.be/|[?&]v=)([A-Za-z0-9_-]{11})", q)
             thumbnail = (
                 f"https://i.ytimg.com/vi/{video_id.group(1)}/hqdefault.jpg"
                 if video_id else ""
