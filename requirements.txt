@@ -7,7 +7,7 @@ youtube-search-python==1.4.9
 youtube-search
 python-dotenv
 gitpython
- aiofiles
+aiofiles
  aiohttp
 requests
 pillow
