@@ -292,8 +292,11 @@ def _soundcloud_search_pick(query: str):
         ):
             duration = item.get("duration_string") or ""
             if not duration and item.get("duration"):
-                seconds = int(item["duration"])
-                duration = f"{seconds // 60}:{seconds % 60:02d}"
+                try:
+                    seconds = int(float(item["duration"]))
+                    duration = f"{seconds // 60}:{seconds % 60:02d}"
+                except (TypeError, ValueError):
+                    duration = ""
             return [title, link, duration, item.get("thumbnail") or IMG_1]
     return []
 
