@@ -3,6 +3,7 @@
 import os
 import re
 import asyncio
+import aiohttp
 import subprocess
 from time import time
 
@@ -230,7 +231,63 @@ async def ytdl_with_fallback(query: str, first_link: str, status_msg=None):
         if ok:
             return 1, value, candidate
         last_error = value or last_error
+
     return 0, last_error, first_link
+
+
+async def audius_fallback(query: str):
+    """Search Audius' official read/stream API after YouTube extraction fails."""
+    if not query or not query.strip():
+        return 0, None, None, None, None
+
+    endpoint = "https://api.audius.co/v1"
+    timeout = aiohttp.ClientTimeout(total=18, connect=7)
+    try:
+        async with aiohttp.ClientSession(
+            timeout=timeout,
+            headers={"User-Agent": "AlexaMusicBot/1.0"},
+        ) as session:
+            async with session.get(
+                f"{endpoint}/tracks/search",
+                params={"query": query.strip(), "limit": 10, "sort_method": "relevant"},
+            ) as response:
+                if response.status != 200:
+                    log.warning("Audius search returned HTTP %s", response.status)
+                    return 0, None, None, None, None
+                payload = await response.json(content_type=None)
+
+        tracks = payload.get("data", []) if isinstance(payload, dict) else []
+        for track in tracks:
+            if not isinstance(track, dict):
+                continue
+            if track.get("is_stream_gated") is True or track.get("is_scheduled_release") is True:
+                continue
+            track_id = track.get("id")
+            title = str(track.get("title") or "").strip()
+            artist_data = track.get("user") or {}
+            artist = str(artist_data.get("name") or "").strip() if isinstance(artist_data, dict) else ""
+            if not track_id or not title or not _same_song_query(query, f"{title} {artist}"):
+                continue
+
+            stream_url = f"{endpoint}/tracks/{track_id}/stream"
+            permalink = str(track.get("permalink") or "").strip()
+            if not permalink:
+                handle = str(artist_data.get("handle") or "").strip() if isinstance(artist_data, dict) else ""
+                permalink = f"https://audius.co/{handle}/{track_id}" if handle else "https://audius.co"
+
+            seconds = track.get("duration")
+            try:
+                seconds = int(seconds)
+                duration = f"{seconds // 60}:{seconds % 60:02d}" if seconds > 0 else ""
+            except (TypeError, ValueError):
+                duration = ""
+            log.info("Audius fallback selected: %s - %s", artist, title)
+            return 1, stream_url, title, duration, permalink
+
+        log.info("Audius had no close public match for query: %s", query)
+    except Exception as exc:
+        log.warning("Audius fallback failed: %s", exc)
+    return 0, None, None, None, None
 
 
 @Client.on_message(command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
@@ -401,8 +458,16 @@ async def play(c: Client, m: Message):
                     if ok:
                         url = playback_url
                     if ok == 0:
+                        audius_query = title if _YT_RE.match(query) else query
+                        alt_ok, alt_stream, alt_title, alt_duration, alt_url = await audius_fallback(audius_query)
+                        if alt_ok:
+                            ok, ytlink = 1, alt_stream
+                            songname = title = alt_title
+                            duration = alt_duration or duration
+                            url = alt_url
+                    if ok == 0:
                         await suhu.edit(
-                            f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
+                            f"⚠️ YouTube/Audius par audio available nahi. Original video yahan kholen: [YouTube link]({url})"
                         )
                     else:
                         if chat_id in QUEUE:
@@ -463,8 +528,16 @@ async def play(c: Client, m: Message):
                 if ok:
                     url = playback_url
                 if ok == 0:
+                    audius_query = title if _YT_RE.match(query) else query
+                    alt_ok, alt_stream, alt_title, alt_duration, alt_url = await audius_fallback(audius_query)
+                    if alt_ok:
+                        ok, ytlink = 1, alt_stream
+                        songname = title = alt_title
+                        duration = alt_duration or duration
+                        url = alt_url
+                if ok == 0:
                     await suhu.edit(
-                        f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
+                        f"⚠️ YouTube/Audius par audio available nahi. Original video yahan kholen: [YouTube link]({url})"
                     )
                 else:
                     if chat_id in QUEUE:
