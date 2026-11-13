@@ -18,20 +18,27 @@ let
       file,
       tag ? "py3",
       sha256,
+      url ? null,
     }:
     fetchurl {
-      url = "https://files.pythonhosted.org/packages/${tag}/${lib.substring 0 1 pname}/${pname}/${file}";
+      url =
+        if url != null then
+          url
+        else
+          "https://files.pythonhosted.org/packages/${tag}/${lib.substring 0 1 pname}/${pname}/${file}";
       inherit sha256;
     };
 
   ntgcallsWheels = {
     x86_64-linux = {
-      file = "ntgcalls-3.0.0-cp314-cp314-manylinux_2_28_x86_64.whl";
-      sha256 = "6105202a64d2e95e6a2d2a1ef9b6e102cdb1a314161a653f485ee942884003e4";
+      file = "ntgcalls-3.0.0-cp313-cp313-manylinux_2_28_x86_64.whl";
+      url = "https://files.pythonhosted.org/packages/da/94/9dd0b1e59129803984090f84ff79bfc840c7f8bde443768c23e28f7ff072/ntgcalls-3.0.0-cp313-cp313-manylinux_2_28_x86_64.whl";
+      sha256 = "7bebbd565b869c916a7a19b9f7af0a2b5052243e6232d7092383918a074c1a10";
     };
     aarch64-linux = {
-      file = "ntgcalls-3.0.0-cp314-cp314-manylinux_2_28_aarch64.whl";
-      sha256 = "e3d07518462aceaa564c5f508d9a51e48f28e3862dab513f4486848ef0783d2d";
+      file = "ntgcalls-3.0.0-cp313-cp313-manylinux_2_28_aarch64.whl";
+      url = "https://files.pythonhosted.org/packages/bf/97/7017ac99d3c2a0e9da5a66bb3f411062974bb0b8b2fa8b129d606ef92183/ntgcalls-3.0.0-cp313-cp313-manylinux_2_28_aarch64.whl";
+      sha256 = "55ad90dccdd02a33bb73907f9e811f83293f881f03f680ad20548952f8ba50c3";
     };
   };
 in
@@ -44,7 +51,7 @@ rec {
     src = wheel (
       {
         pname = "ntgcalls";
-        tag = "cp314";
+        tag = "cp313";
       }
       // ntgcallsWheels.${stdenv.hostPlatform.system}
     );
