@@ -322,13 +322,20 @@ async def soundcloud_fallback(query: str):
             continue
         if not _same_song_query(query, title, artist):
             continue
-        ok, stream_url = await ytdl("bestaudio", link)
+        try:
+            ok, stream_url = await ytdl("bestaudio", link)
+        except Exception as exc:
+            log.warning("SoundCloud stream resolution failed for %s: %s", link, exc)
+            continue
         if not ok:
             continue
         duration = item.get("duration_string") or ""
         if not duration and item.get("duration"):
-            seconds = int(item["duration"])
-            duration = f"{seconds // 60}:{seconds % 60:02d}"
+            try:
+                seconds = int(float(item["duration"]))
+                duration = f"{seconds // 60}:{seconds % 60:02d}"
+            except (TypeError, ValueError):
+                duration = ""
         log.info("SoundCloud fallback selected: %s - %s", artist, title)
         return 1, stream_url, title, duration, link
     return 0, None, None, None, None
