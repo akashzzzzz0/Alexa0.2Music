@@ -11,8 +11,7 @@ RUN sed -i 's/Components: main.*/Components: main contrib non-free non-free-firm
 
 COPY . /app
 WORKDIR /app
-RUN pip3 install --no-cache-dir --upgrade --requirement requirements.txt \
-    && pip3 install --no-cache-dir --upgrade "yt-dlp[default]"
+RUN pip3 install --no-cache-dir --upgrade --requirement requirements.txt
 
 # Chromium + its system libs for the headless-browser fallback (Playwright).
 # Opt-in — it adds ~450 MB — via `--build-arg INSTALL_BROWSER=true` (or the
