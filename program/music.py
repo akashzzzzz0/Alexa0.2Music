@@ -43,6 +43,11 @@ def _ytdl_site_flags():
     return flags
 
 
+def _youtube_search_results(query: str, limit: int = 8):
+    """Run the blocking YouTube search client outside the asyncio event loop."""
+    return VideosSearch(query, limit=limit).result().get("result", [])
+
+
 def ytsearch(query: str):
     try:
         q = query.strip()
@@ -68,7 +73,7 @@ def ytsearch(query: str):
         # Search several YouTube candidates and prefer the closest title match.
         # This improves auto-play accuracy without silently selecting a loosely
         # related result when YouTube's ranking is imperfect.
-        results = VideosSearch(query, limit=8).result().get("result", [])
+        results = _youtube_search_results(query, limit=8)
         if not results:
             return 0
         query_tokens = _music_tokens(query)
@@ -128,6 +133,7 @@ async def ytdl(format: str, link: str, status_msg=None):
         # bypass YouTube verification; they only recover temporary transport errors.
         "--retries", "3",
         "--fragment-retries", "3",
+        "--concurrent-fragments", "4",
         "--extractor-retries", "3",
         "--file-access-retries", "3",
         "--socket-timeout", "30",
@@ -223,7 +229,7 @@ async def ytdl_with_fallback(query: str, first_link: str, status_msg=None):
     candidates = [first_link]
     if not re.match(r"^https?://", (query or "").strip(), re.I):
         try:
-            results = VideosSearch(query, limit=6).result().get("result", [])
+            results = await asyncio.to_thread(_youtube_search_results, query, 6)
             for item in results:
                 link = item.get("link")
                 title = item.get("title", "")
@@ -455,7 +461,7 @@ async def play(c: Client, m: Message):
             else:
                 suhu = await c.send_message(chat_id, "🔍 **Searching...**", message_thread_id=thread_id)
                 query = m.text.split(None, 1)[1]
-                search = ytsearch(query)
+                search = await asyncio.to_thread(ytsearch, query)
                 if search == 0:
                     await suhu.edit("❌ **no results found.**")
                 else:
@@ -525,7 +531,7 @@ async def play(c: Client, m: Message):
         else:
             suhu = await c.send_message(chat_id, "🔍 **Searching...**", message_thread_id=thread_id)
             query = m.text.split(None, 1)[1]
-            search = ytsearch(query)
+            search = await asyncio.to_thread(ytsearch, query)
             if search == 0:
                 await suhu.edit("❌ **no results found.**")
             else:
