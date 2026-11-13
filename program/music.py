@@ -331,10 +331,10 @@ async def play(c: Client, m: Message):
                     format = "bestaudio[ext=m4a]"
                     ok, ytlink = await ytdl(format, url, suhu)
                     if ok == 0:
-                    await suhu.edit(
-                        f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
-                    )
-                else:
+                        await suhu.edit(
+                            f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
+                        )
+                    else:
                         if chat_id in QUEUE:
                             pos = add_to_queue(
                                 chat_id, songname, ytlink, url, "Audio", 0
@@ -391,21 +391,9 @@ async def play(c: Client, m: Message):
                 format = "bestaudio[ext=m4a]"
                 ok, ytlink = await ytdl(format, url, suhu)
                 if ok == 0:
-                    # Same public SoundCloud fallback for ordinary /play searches
-                    # and direct YouTube URLs; never use account cookies.
-                    fallback = await _soundcloud_search(query)
-                    if fallback:
-                        alt_title, alt_url, alt_duration, alt_thumbnail = fallback
-                        alt_ok, alt_stream = await ytdl(format, alt_url, suhu)
-                        if alt_ok:
-                            songname, url, duration, ytlink = alt_title, alt_url, alt_duration, alt_stream
-                            try:
-                                image = await thumb(alt_thumbnail or thumbnail, songname, userid, ctitle)
-                            except Exception:
-                                pass
-                            ok = 1
-                if ok == 0:
-                    await suhu.edit(f"❌ YouTube aur alternate source dono se track nahi mil saka.\n\n» `{ytlink}`")
+                    await suhu.edit(
+                        f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
+                    )
                 else:
                     if chat_id in QUEUE:
                         pos = add_to_queue(chat_id, songname, ytlink, url, "Audio", 0)
