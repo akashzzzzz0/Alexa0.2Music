@@ -445,7 +445,7 @@ async def play(c: Client, m: Message):
                                 pass
                             ok = 1
                 if ok == 0:
-                    await suhu.edit(f"❌ YouTube aur alternate source dono se track nahi mil saka.\\n\\n» `{ytlink}`")
+                    await suhu.edit(f"❌ YouTube aur alternate source dono se track nahi mil saka.\n\n» `{ytlink}`")
                 else:
                     if chat_id in QUEUE:
                         pos = add_to_queue(chat_id, songname, ytlink, url, "Audio", 0)
