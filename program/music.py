@@ -50,9 +50,6 @@ def ytsearch(query: str):
             # any direct URL — use yt-dlp for metadata (handles YouTube, Rutube, Vimeo, …)
             cmd = ["yt-dlp", "--no-warnings", "--skip-download",
                    "--print", "%(title)s\x1f%(duration_string)s\x1f%(id)s\x1f%(thumbnail)s"]
-            if is_yt:
-                # Try public, unauthenticated clients supported by yt-dlp.
-                cmd += ["--extractor-args", "youtube:player_client=android,web_safari"]
             if not is_yt:
                 cmd += _ytdl_site_flags()
             cmd.append(q)
@@ -76,6 +73,8 @@ def ytsearch(query: str):
         return [songname, url, duration, thumbnail]
     except Exception as e:
         log.warning("ytsearch failed: %s", e)
+        if "q" in locals() and _YT_RE.match(q):
+            return [q, q, "", ""]
         return 0
 
 
@@ -113,10 +112,6 @@ async def ytdl(format: str, link: str, status_msg=None):
         "--newline",
         "--progress-template",
         "download:PROG|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
-        # Try public clients together: Android avoids some SABR stream failures,
-        # while web_safari provides a second unauthenticated extraction path.
-        *(["--extractor-args", "youtube:player_client=android,web_safari"]
-          if _YT_RE.match(link) else []),
         "--print",
         "after_move:filepath",
         "-f",
@@ -168,29 +163,6 @@ async def ytdl(format: str, link: str, status_msg=None):
     if proc.returncode == 0 and path:
         return 1, path
     return 0, ("".join(stderr_buf)[-500:] or "download failed")
-
-
-async def _soundcloud_search(query: str):
-    """Find one public SoundCloud track when YouTube extraction is unavailable."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "yt-dlp", "--no-warnings", "--flat-playlist", "--playlist-items", "1",
-            "--skip-download", "--print",
-            "%(title)s|||%(webpage_url)s|||%(duration_string)s|||%(thumbnail)s",
-            f"scsearch1:{query}",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-        out, _ = await asyncio.wait_for(proc.communicate(), 35)
-        if proc.returncode != 0:
-            return None
-        line = out.decode(errors="ignore").strip().splitlines()[0]
-        parts = line.split("|||")
-        if len(parts) < 2 or not parts[1].startswith("http"):
-            return None
-        return [parts[0] or query, parts[1], parts[2] if len(parts) > 2 else "", parts[3] if len(parts) > 3 else ""]
-    except Exception as exc:
-        log.warning("SoundCloud fallback search failed: %s", exc)
-        return None
 
 
 @Client.on_message(command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
@@ -359,22 +331,10 @@ async def play(c: Client, m: Message):
                     format = "bestaudio[ext=m4a]"
                     ok, ytlink = await ytdl(format, url, suhu)
                     if ok == 0:
-                        # YouTube may temporarily require sign-in verification.
-                        # Try a public SoundCloud result; no account cookies are used.
-                        fallback = await _soundcloud_search(query)
-                        if fallback:
-                            alt_title, alt_url, alt_duration, alt_thumbnail = fallback
-                            alt_ok, alt_stream = await ytdl(format, alt_url, suhu)
-                            if alt_ok:
-                                songname, url, duration, ytlink = alt_title, alt_url, alt_duration, alt_stream
-                                try:
-                                    image = await thumb(alt_thumbnail or thumbnail, songname, userid, ctitle)
-                                except Exception:
-                                    pass
-                                ok = 1
-                    if ok == 0:
-                        await suhu.edit(f"❌ YouTube aur alternate source dono se track nahi mil saka.\n\n» `{ytlink}`")
-                    else:
+                    await suhu.edit(
+                        f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
+                    )
+                else:
                         if chat_id in QUEUE:
                             pos = add_to_queue(
                                 chat_id, songname, ytlink, url, "Audio", 0
