@@ -5,6 +5,7 @@ import re
 import asyncio
 import aiohttp
 import subprocess
+import json
 from time import time
 
 import logging
@@ -73,16 +74,23 @@ def ytsearch(query: str):
         # Search several YouTube candidates and prefer the closest title match.
         # This improves auto-play accuracy without silently selecting a loosely
         # related result when YouTube's ranking is imperfect.
-        results = _youtube_search_results(query, limit=8)
+        results = _youtube_search_results(query, limit=10)
         if not results:
-            return 0
-        query_tokens = _music_tokens(query)
-        def _score(item):
-            title_tokens = _music_tokens(item.get("title", ""))
-            if not query_tokens:
-                return 0.0
-            return len(query_tokens & title_tokens) / len(query_tokens)
-        data = max(results, key=_score)
+            # YouTube search itself can be unavailable; try a public SoundCloud
+            # result so /play still has a supported source to attempt.
+            return _soundcloud_search_pick(query) or 0
+
+        ranked = sorted(
+            results,
+            key=lambda item: _music_match_score(
+                query, item.get("title", ""), item.get("channel", "")
+            ),
+            reverse=True,
+        )
+        data = ranked[0]
+        if _music_match_score(query, data.get("title", ""), data.get("channel", "")) < 0.28:
+            return _soundcloud_search_pick(query) or 0
+
         songname = data["title"]
         url = data["link"]
         duration = data.get("duration") or ""
@@ -97,6 +105,8 @@ def ytsearch(query: str):
                 if video_id else ""
             )
             return [q, q, "", thumbnail]
+        if "q" in locals() and not re.match(r"^https?://", q, re.I):
+            return _soundcloud_search_pick(q) or 0
         return 0
 
 
@@ -210,14 +220,143 @@ def _music_tokens(value: str):
     }
 
 
-def _same_song_query(query: str, title: str) -> bool:
+def _music_match_score(query: str, title: str, artist: str = "") -> float:
+    """Score title + artist relevance while rewarding exact title matches."""
     query_tokens = _music_tokens(query)
     title_tokens = _music_tokens(title)
-    if not query_tokens or not title_tokens:
-        return False
-    # Require most of the user's meaningful search terms to appear in the
-    # candidate title; don't silently play a loosely related result.
-    return len(query_tokens & title_tokens) / len(query_tokens) >= 0.60
+    artist_tokens = _music_tokens(artist)
+    candidate_tokens = title_tokens | artist_tokens
+    if not query_tokens or not candidate_tokens:
+        return 0.0
+    matched = query_tokens & candidate_tokens
+    coverage = len(matched) / len(query_tokens)
+    title_coverage = len(query_tokens & title_tokens) / len(query_tokens)
+    precision = len(matched) / len(candidate_tokens)
+    return (0.65 * coverage) + (0.25 * title_coverage) + (0.10 * precision)
+
+
+def _same_song_query(query: str, title: str, artist: str = "") -> bool:
+    # Conservative threshold: don't substitute a vaguely related track.
+    return _music_match_score(query, title, artist) >= 0.48
+
+
+def _soundcloud_search_results(query: str, limit: int = 8):
+    """Search public SoundCloud tracks with yt-dlp's maintained extractor."""
+    if not query or not query.strip():
+        return []
+    cmd = [
+        "yt-dlp", "--no-warnings", "--flat-playlist", "--dump-single-json",
+        "--playlist-end", str(limit), "--socket-timeout", "20",
+        *_ytdl_site_flags(), f"scsearch{limit}:{query.strip()}",
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=35,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            log.info("SoundCloud search unavailable: %s", proc.stderr[-300:])
+            return []
+        payload = json.loads(proc.stdout)
+        entries = payload.get("entries", []) if isinstance(payload, dict) else []
+        return [entry for entry in entries if isinstance(entry, dict)]
+    except Exception as exc:
+        log.warning("SoundCloud search failed: %s", exc)
+        return []
+
+
+def _soundcloud_search_pick(query: str):
+    """Return the closest public SoundCloud result in /play's search tuple."""
+    entries = _soundcloud_search_results(query, limit=8)
+    ranked = sorted(
+        entries,
+        key=lambda item: _music_match_score(
+            query,
+            item.get("title", ""),
+            item.get("uploader") or item.get("artist") or item.get("channel") or "",
+        ),
+        reverse=True,
+    )
+    for item in ranked:
+        title = str(item.get("title") or "").strip()
+        link = str(
+            item.get("webpage_url") or item.get("original_url") or item.get("url") or ""
+        ).strip()
+        artist = str(
+            item.get("uploader") or item.get("artist") or item.get("channel") or ""
+        ).strip()
+        if (
+            title
+            and link.startswith("https://")
+            and "soundcloud.com" in link
+            and _same_song_query(query, title, artist)
+        ):
+            duration = item.get("duration_string") or ""
+            if not duration and item.get("duration"):
+                try:
+                    seconds = int(float(item["duration"]))
+                    duration = f"{seconds // 60}:{seconds % 60:02d}"
+                except (TypeError, ValueError):
+                    duration = ""
+            return [title, link, duration, item.get("thumbnail") or IMG_1]
+    return []
+
+
+async def soundcloud_fallback(query: str):
+    """Resolve a matching public SoundCloud track to a direct live stream URL."""
+    entries = await asyncio.to_thread(_soundcloud_search_results, query, 8)
+    ranked = sorted(
+        entries,
+        key=lambda item: _music_match_score(
+            query,
+            item.get("title", ""),
+            item.get("uploader") or item.get("artist") or item.get("channel") or "",
+        ),
+        reverse=True,
+    )
+    for item in ranked[:4]:
+        title = str(item.get("title") or "").strip()
+        artist = str(
+            item.get("uploader") or item.get("artist") or item.get("channel") or ""
+        ).strip()
+        link = str(
+            item.get("webpage_url") or item.get("original_url") or item.get("url") or ""
+        ).strip()
+        if not title or not link.startswith("https://") or "soundcloud.com" not in link:
+            continue
+        if not _same_song_query(query, title, artist):
+            continue
+        try:
+            ok, stream_url = await ytdl("bestaudio", link)
+        except Exception as exc:
+            log.warning("SoundCloud stream resolution failed for %s: %s", link, exc)
+            continue
+        if not ok:
+            continue
+        duration = item.get("duration_string") or ""
+        if not duration and item.get("duration"):
+            try:
+                seconds = int(float(item["duration"]))
+                duration = f"{seconds // 60}:{seconds % 60:02d}"
+            except (TypeError, ValueError):
+                duration = ""
+        log.info("SoundCloud fallback selected: %s - %s", artist, title)
+        return 1, stream_url, title, duration, link
+    return 0, None, None, None, None
+
+
+async def alternative_audio_fallback(query: str, status_msg=None):
+    """Try public Audius first, then public SoundCloud; never depend on YouTube auth."""
+    if status_msg is not None:
+        try:
+            await status_msg.edit(
+                "⚠️ YouTube audio unavailable. Checking Audius and SoundCloud…"
+            )
+        except Exception:
+            pass
+    result = await audius_fallback(query)
+    if result[0]:
+        return result
+    return await soundcloud_fallback(query)
 
 
 async def ytdl_with_fallback(query: str, first_link: str, status_msg=None):
@@ -483,7 +622,7 @@ async def play(c: Client, m: Message):
                         url = playback_url
                     if ok == 0:
                         audius_query = title if _YT_RE.match(query) else query
-                        alt_ok, alt_stream, alt_title, alt_duration, alt_url = await audius_fallback(audius_query)
+                        alt_ok, alt_stream, alt_title, alt_duration, alt_url = await alternative_audio_fallback(audius_query, suhu)
                         if alt_ok:
                             ok, ytlink = 1, alt_stream
                             songname = title = alt_title
@@ -491,7 +630,7 @@ async def play(c: Client, m: Message):
                             url = alt_url
                     if ok == 0:
                         await suhu.edit(
-                            f"⚠️ YouTube/Audius par audio available nahi. Original video yahan kholen: [YouTube link]({url})"
+                            f"⚠️ YouTube/Audius/SoundCloud par matching audio available nahi. Original video yahan kholen: [YouTube link]({url})"
                         )
                     else:
                         if chat_id in QUEUE:
@@ -553,7 +692,7 @@ async def play(c: Client, m: Message):
                     url = playback_url
                 if ok == 0:
                     audius_query = title if _YT_RE.match(query) else query
-                    alt_ok, alt_stream, alt_title, alt_duration, alt_url = await audius_fallback(audius_query)
+                    alt_ok, alt_stream, alt_title, alt_duration, alt_url = await alternative_audio_fallback(audius_query, suhu)
                     if alt_ok:
                         ok, ytlink = 1, alt_stream
                         songname = title = alt_title
@@ -561,7 +700,7 @@ async def play(c: Client, m: Message):
                         url = alt_url
                 if ok == 0:
                     await suhu.edit(
-                        f"⚠️ YouTube/Audius par audio available nahi. Original video yahan kholen: [YouTube link]({url})"
+                        f"⚠️ YouTube/Audius/SoundCloud par matching audio available nahi. Original video yahan kholen: [YouTube link]({url})"
                     )
                 else:
                     if chat_id in QUEUE:
