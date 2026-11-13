@@ -3,7 +3,7 @@ ffmpeg-python
 py-tgcalls
 kurigram
 # Unpinned intentionally: clean installs should receive the current yt-dlp release.
-yt-dlp[default]
+yt-dlp[default]==2026.10.26
 youtube-search-python==1.4.9
 youtube-search
 python-dotenv
