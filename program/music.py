@@ -44,6 +44,11 @@ def _ytdl_site_flags():
     return flags
 
 
+def _youtube_extractor_flags():
+    """Use yt-dlp's documented default YouTube player-client configuration."""
+    return ["--extractor-args", "youtube:player_client=default"]
+
+
 def _youtube_search_results(query: str, limit: int = 8):
     """Run the blocking YouTube search client outside the asyncio event loop."""
     return VideosSearch(query, limit=limit).result().get("result", [])
@@ -57,7 +62,9 @@ def ytsearch(query: str):
             # any direct URL — use yt-dlp for metadata (handles YouTube, Rutube, Vimeo, …)
             cmd = ["yt-dlp", "--no-warnings", "--skip-download",
                    "--print", "%(title)s\x1f%(duration_string)s\x1f%(id)s\x1f%(thumbnail)s"]
-            if not is_yt:
+            if is_yt:
+                cmd += _youtube_extractor_flags()
+            else:
                 cmd += _ytdl_site_flags()
             cmd.append(q)
             out = subprocess.run(
@@ -139,6 +146,7 @@ async def ytdl(format: str, link: str, status_msg=None):
         "yt-dlp",
         "--no-warnings",
         "--no-playlist",
+        *_youtube_extractor_flags(),
         # Retry transient extractor/network/fragment failures. These do not
         # bypass YouTube verification; they only recover temporary transport errors.
         "--retries", "3",
