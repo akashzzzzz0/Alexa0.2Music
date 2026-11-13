@@ -170,6 +170,69 @@ async def ytdl(format: str, link: str, status_msg=None):
     return 0, ("".join(stderr_buf)[-500:] or "download failed")
 
 
+def _music_tokens(value: str):
+    """Normalize a search phrase/title for conservative same-track matching."""
+    value = re.sub(r"\\([^)]*\\)|\\[[^]]*\\]", " ", str(value or "").lower())
+    value = re.sub(
+        r"\\b(official|music|video|audio|lyrics?|visualizer|hd|4k|full|"
+        r"lyrical|remastered| slowed|reverb)\\b",
+        " ",
+        value,
+    )
+    return {
+        token for token in re.findall(r"[a-z0-9]+", value)
+        if len(token) > 1
+    }
+
+
+def _same_song_query(query: str, title: str) -> bool:
+    query_tokens = _music_tokens(query)
+    title_tokens = _music_tokens(title)
+    if not query_tokens or not title_tokens:
+        return False
+    # Require most of the user's meaningful search terms to appear in the
+    # candidate title; don't silently play a loosely related result.
+    return len(query_tokens & title_tokens) / len(query_tokens) >= 0.60
+
+
+async def ytdl_with_fallback(query: str, first_link: str, status_msg=None):
+    """Try the chosen YouTube result, then a few close title matches.
+
+    This does not bypass YouTube verification. It only tries alternate
+    matching search results when one particular video is unavailable.
+    """
+    candidates = [first_link]
+    if not re.match(r"^https?://", (query or "").strip(), re.I):
+        try:
+            results = VideosSearch(query, limit=6).result().get("result", [])
+            for item in results:
+                link = item.get("link")
+                title = item.get("title", "")
+                if (
+                    link
+                    and link not in candidates
+                    and _same_song_query(query, title)
+                ):
+                    candidates.append(link)
+        except Exception as exc:
+            log.warning("YouTube fallback search failed: %s", exc)
+
+    last_error = "No matching YouTube result could be played."
+    for index, candidate in enumerate(candidates[:3]):
+        if index and status_msg is not None:
+            try:
+                await status_msg.edit(
+                    "⚠️ First result unavailable. Trying another matching YouTube result..."
+                )
+            except Exception:
+                pass
+        ok, value = await ytdl("bestaudio[ext=m4a]", candidate, status_msg if index == 0 else None)
+        if ok:
+            return 1, value, candidate
+        last_error = value or last_error
+    return 0, last_error, first_link
+
+
 @Client.on_message(command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
 @errors
 async def play(c: Client, m: Message):
@@ -334,7 +397,9 @@ async def play(c: Client, m: Message):
                     except Exception as e:
                         return await suhu.edit(f"🚫 couldn't build the thumbnail: `{e}`")
                     format = "bestaudio[ext=m4a]"
-                    ok, ytlink = await ytdl(format, url, suhu)
+                    ok, ytlink, playback_url = await ytdl_with_fallback(query, url, suhu)
+                    if ok:
+                        url = playback_url
                     if ok == 0:
                         await suhu.edit(
                             f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
@@ -394,7 +459,9 @@ async def play(c: Client, m: Message):
                 except Exception as e:
                     return await suhu.edit(f"🚫 couldn't build the thumbnail: `{e}`")
                 format = "bestaudio[ext=m4a]"
-                ok, ytlink = await ytdl(format, url, suhu)
+                ok, ytlink, playback_url = await ytdl_with_fallback(query, url, suhu)
+                    if ok:
+                        url = playback_url
                 if ok == 0:
                     await suhu.edit(
                         f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
