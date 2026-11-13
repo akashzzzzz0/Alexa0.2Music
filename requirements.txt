@@ -2,8 +2,7 @@ tgcrypto
 ffmpeg-python
 py-tgcalls
 kurigram
-# Unpinned intentionally: clean installs should receive the current yt-dlp release.
-yt-dlp[default]==2026.10.26
+yt-dlp
 youtube-search-python==1.4.9
 youtube-search
 python-dotenv
@@ -13,6 +12,7 @@ aiohttp
 requests
 pillow
 psutil
+wget
 # extra stream resolvers: headless-browser fallback (Chromium itself is opt-in
 # via INSTALL_BROWSER), plus deps commonly needed by extractor plugins
 playwright

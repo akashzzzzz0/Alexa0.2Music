@@ -7,15 +7,8 @@ if os.path.exists("local.env"):
 
 load_dotenv()
 
-if not os.getenv("SESSION_NAME") and os.getenv("SESSION_STRING"):
-    os.environ["SESSION_NAME"] = os.getenv("SESSION_STRING", "")
-if not os.getenv("SUDO_USERS") and os.getenv("OWNER_ID"):
-    os.environ["SUDO_USERS"] = os.getenv("OWNER_ID", "")
-if not os.getenv("BOT_NAME"):
-    os.environ["BOT_NAME"] = "Alexa"
-
 # ---- fail fast on missing/invalid required config, with a clear message ----
-_REQUIRED = ("API_ID", "API_HASH", "BOT_TOKEN", "SESSION_NAME", "SUDO_USERS")
+_REQUIRED = ("API_ID", "API_HASH", "BOT_TOKEN", "BOT_USERNAME", "SESSION_NAME", "SUDO_USERS")
 _missing = [k for k in _REQUIRED if not (getenv(k) or "").strip()]
 if _missing:
     raise SystemExit(
@@ -31,7 +24,7 @@ _DEFAULT_IMG = "driver/source/LightBlue.png"
 admins = {}
 SESSION_NAME = getenv("SESSION_NAME", "session")
 BOT_TOKEN = getenv("BOT_TOKEN")
-BOT_NAME = getenv("BOT_NAME", "Alexa")
+BOT_NAME = getenv("BOT_NAME", "Music Bot")
 try:
     API_ID = int(getenv("API_ID"))
 except ValueError:
@@ -39,7 +32,7 @@ except ValueError:
 API_HASH = getenv("API_HASH")
 OWNER_NAME = getenv("OWNER_NAME", "")
 ALIVE_NAME = getenv("ALIVE_NAME", "")
-BOT_USERNAME = getenv("BOT_USERNAME", "").lstrip("@")
+BOT_USERNAME = getenv("BOT_USERNAME", "")
 ASSISTANT_NAME = getenv("ASSISTANT_NAME", "assistant")
 GROUP_SUPPORT = getenv("GROUP_SUPPORT", "")
 UPDATES_CHANNEL = getenv("UPDATES_CHANNEL", "")
@@ -49,16 +42,10 @@ except ValueError:
     raise SystemExit("❌ SUDO_USERS must be space-separated numeric Telegram user ids.")
 COMMAND_PREFIXES = list(getenv("COMMAND_PREFIXES", "/ ! .").split())
 ALIVE_IMG = getenv("ALIVE_IMG", _DEFAULT_IMG)
-# Legacy Alexa repo stored DURATION_LIMIT in seconds; this project uses minutes.
-_duration_minutes = getenv("ALEXA_DURATION_LIMIT_MINUTES")
-if _duration_minutes:
-    DURATION_LIMIT = int(_duration_minutes)
-else:
-    _duration_raw = int(getenv("DURATION_LIMIT", "240"))
-    DURATION_LIMIT = max(1, _duration_raw // 60) if _duration_raw > 1440 else _duration_raw
+DURATION_LIMIT = int(getenv("DURATION_LIMIT", "540000"))
 # Max size of the downloads cache in MB; pruned (oldest first) after each
 # stream ends. 0 = delete everything not queued as soon as a stream ends.
-DOWNLOADS_CACHE_LIMIT_MB = int(getenv("DOWNLOADS_CACHE_LIMIT_MB", "128"))
+DOWNLOADS_CACHE_LIMIT_MB = int(getenv("DOWNLOADS_CACHE_LIMIT_MB", "4096"))
 # Leave the voice chat after this many minutes with no human listeners. 0 = off.
 IDLE_LEAVE_MINUTES = int(getenv("IDLE_LEAVE_MINUTES", "10"))
 # Local media library root (in-container path; mount your host folder there).
