@@ -166,6 +166,29 @@ async def ytdl(format: str, link: str, status_msg=None):
     return 0, ("".join(stderr_buf)[-500:] or "download failed")
 
 
+async def _soundcloud_search(query: str):
+    """Find one public SoundCloud track when YouTube extraction is unavailable."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "yt-dlp", "--no-warnings", "--flat-playlist", "--playlist-items", "1",
+            "--skip-download", "--print",
+            "%(title)s\\t%(webpage_url)s\\t%(duration_string)s\\t%(thumbnail)s",
+            f"scsearch1:{query}",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), 35)
+        if proc.returncode != 0:
+            return None
+        line = out.decode(errors="ignore").strip().splitlines()[0]
+        parts = line.split("\\t")
+        if len(parts) < 2 or not parts[1].startswith("http"):
+            return None
+        return [parts[0] or query, parts[1], parts[2] if len(parts) > 2 else "", parts[3] if len(parts) > 3 else ""]
+    except Exception as exc:
+        log.warning("SoundCloud fallback search failed: %s", exc)
+        return None
+
+
 @Client.on_message(command(["play", f"play@{BOT_USERNAME}"]) & other_filters)
 @errors
 async def play(c: Client, m: Message):
@@ -332,7 +355,21 @@ async def play(c: Client, m: Message):
                     format = "bestaudio[ext=m4a]"
                     ok, ytlink = await ytdl(format, url, suhu)
                     if ok == 0:
-                        await suhu.edit(f"❌ yt-dl issues detected\n\n» `{ytlink}`")
+                        # YouTube may temporarily require sign-in verification.
+                        # Try a public SoundCloud result; no account cookies are used.
+                        fallback = await _soundcloud_search(query)
+                        if fallback:
+                            alt_title, alt_url, alt_duration, alt_thumbnail = fallback
+                            alt_ok, alt_stream = await ytdl(format, alt_url, suhu)
+                            if alt_ok:
+                                songname, url, duration, ytlink = alt_title, alt_url, alt_duration, alt_stream
+                                try:
+                                    image = await thumb(alt_thumbnail or thumbnail, songname, userid, ctitle)
+                                except Exception:
+                                    pass
+                                ok = 1
+                    if ok == 0:
+                        await suhu.edit(f"❌ YouTube aur alternate source dono se track nahi mil saka.\n\n» `{ytlink}`")
                     else:
                         if chat_id in QUEUE:
                             pos = add_to_queue(
