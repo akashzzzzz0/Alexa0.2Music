@@ -172,10 +172,10 @@ async def ytdl(format: str, link: str, status_msg=None):
 
 def _music_tokens(value: str):
     """Normalize a search phrase/title for conservative same-track matching."""
-    value = re.sub(r"\\([^)]*\\)|\\[[^]]*\\]", " ", str(value or "").lower())
+    value = re.sub(r"\([^)]*\)|\[[^]]*\]", " ", str(value or "").lower())
     value = re.sub(
-        r"\\b(official|music|video|audio|lyrics?|visualizer|hd|4k|full|"
-        r"lyrical|remastered| slowed|reverb)\\b",
+        r"\b(official|music|video|audio|lyrics?|visualizer|hd|4k|full|"
+        r"lyrical|remastered|slowed|reverb)\b",
         " ",
         value,
     )
@@ -460,8 +460,8 @@ async def play(c: Client, m: Message):
                     return await suhu.edit(f"🚫 couldn't build the thumbnail: `{e}`")
                 format = "bestaudio[ext=m4a]"
                 ok, ytlink, playback_url = await ytdl_with_fallback(query, url, suhu)
-                    if ok:
-                        url = playback_url
+                if ok:
+                    url = playback_url
                 if ok == 0:
                     await suhu.edit(
                         f"⚠️ YouTube audio abhi available nahi. Original video yahan kholen: [YouTube link]({url})"
