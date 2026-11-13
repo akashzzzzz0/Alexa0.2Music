@@ -65,11 +65,22 @@ def ytsearch(query: str):
             # prefer the well-known HQ thumbnail URL for YouTube
             thumbnail = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if is_yt and vid else raw_thumb
             return [title, q, duration, thumbnail]
-        search = VideosSearch(query, limit=1).result()
-        data = search["result"][0]
+        # Search several YouTube candidates and prefer the closest title match.
+        # This improves auto-play accuracy without silently selecting a loosely
+        # related result when YouTube's ranking is imperfect.
+        results = VideosSearch(query, limit=8).result().get("result", [])
+        if not results:
+            return 0
+        query_tokens = _music_tokens(query)
+        def _score(item):
+            title_tokens = _music_tokens(item.get("title", ""))
+            if not query_tokens:
+                return 0.0
+            return len(query_tokens & title_tokens) / len(query_tokens)
+        data = max(results, key=_score)
         songname = data["title"]
         url = data["link"]
-        duration = data["duration"]
+        duration = data.get("duration") or ""
         thumbnail = f"https://i.ytimg.com/vi/{data['id']}/hqdefault.jpg"
         return [songname, url, duration, thumbnail]
     except Exception as e:
@@ -113,6 +124,13 @@ async def ytdl(format: str, link: str, status_msg=None):
         "yt-dlp",
         "--no-warnings",
         "--no-playlist",
+        # Retry transient extractor/network/fragment failures. These do not
+        # bypass YouTube verification; they only recover temporary transport errors.
+        "--retries", "3",
+        "--fragment-retries", "3",
+        "--extractor-retries", "3",
+        "--file-access-retries", "3",
+        "--socket-timeout", "30",
         *(["--sponsorblock-remove", SPONSORBLOCK_REMOVE] if SPONSORBLOCK_REMOVE else []),
         "--no-simulate",
         "--newline",
