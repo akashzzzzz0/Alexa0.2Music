@@ -17,8 +17,7 @@
 }:
 
 let
-  # Keep native wheels and the interpreter ABI aligned with the package environment.
-  extra = callPackage ./python-deps.nix { inherit python3; };
+  extra = callPackage ./python-deps.nix { };
   pythonEnv = python3.withPackages (
     ps:
     [

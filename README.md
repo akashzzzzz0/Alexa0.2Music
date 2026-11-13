@@ -1,8 +1,8 @@
-# Alexa Music
+# tg-streaming-bot
 
-Alexa is a customized deployment of [tg-streaming-bot](https://github.com/antlis/tg-streaming-bot) that streams **music & video into group voice chats**, built with [Pyrogram](https://docs.pyrogram.org) and [py-tgcalls](https://github.com/pytgcalls/pytgcalls).
+Telegram bot that streams **music & video into group voice chats**, built with [Pyrogram](https://docs.pyrogram.org) and [py-tgcalls](https://github.com/pytgcalls/pytgcalls).
 
-This repository keeps the upstream GPL-3.0 license and credits the original project. The bot display name is configured as **Alexa**.
+![Demo](assets/demo.gif)
 
 ## ✨ Features
 - **Music & video** into group voice chats — from YouTube (search **or** URL), an audio/video file posted in Telegram, or a live link (m3u8 / YouTube-live)
@@ -88,7 +88,7 @@ Docker-only — on Nix, point `PROXY_URL` at whatever proxy you run.
 | `SESSION_NAME` | ✅ | assistant session string (step 2) |
 | `SUDO_USERS` | ✅ | space-separated admin user ids |
 | `DURATION_LIMIT` | — | max track length (minutes) |
-| `DOWNLOADS_CACHE_LIMIT_MB` | — | downloads-cache cap in MB, pruned after streams and every 10 minutes (default 128; 0 = delete unqueued files) |
+| `DOWNLOADS_CACHE_LIMIT_MB` | — | downloads-cache cap in MB, pruned after each stream (default 4096; 0 = delete after playing) |
 | `LIBRARY_HOST_DIR` / `LIBRARY_ROOT` / `LIBRARY_CATEGORIES` | — | local media library: host folder to mount read-only, the in-container path (`/library`), and an optional comma-separated category allowlist; leave unset to disable |
 | `RADIO_STATIONS` | — | override the built-in `/radio` presets (`Name=URL,Name=URL,…`) |
 | `RADIO_IMG` | — | card image shown while streaming radio (defaults to `IMG_1`) |
