@@ -13,7 +13,8 @@ import os
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-PORT = int(os.getenv("PORT", "8080"))
+# EthioDeploy injects PORT at runtime. 3000 is also the safe platform default.
+PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 MAX_BODY = 32_000
 MAX_HISTORY = 12
@@ -117,7 +118,6 @@ def answer(message, history=None):
     if has_any(t, ("sorry", "maaf karna", "my bad")):
         return "Koi baat nahi, sab theek hai."
     if has_any(t, ("yes", "haan", "han", "yup", "yeah")):
-        # Use the last assistant turn only for a tiny amount of conversational continuity.
         if history:
             previous = " ".join(normalize(x.get("content", "")) for x in history[-4:] if isinstance(x, dict))
             if has_any(previous, ("jokes", "joke")):
