@@ -13,7 +13,8 @@ import os
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-PORT = int(os.getenv("PORT", "8080"))
+# EthioDeploy injects PORT at runtime. 3000 is also the safe platform default.
+PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 MAX_BODY = 32_000
 MAX_HISTORY = 12
