@@ -1,37 +1,38 @@
-# Alexa Own AI — Micro fallback service
+# Alexa Own AI — low-memory local assistant
 
-A separate, dependency-free HTTP service for very small free hosting plans.
+A dependency-free Python HTTP service intended for very small containers (including
+256 MB class plans). It provides a small offline intent/utility engine.
 
-**Important:** this first version is a rules-based local intent engine, NOT a trained
-LLM and NOT a substitute for Qwen/Llama. It can answer a few common greetings and
-small-talk intents locally. For open-ended chat, Alexa must continue using its
-configured AI providers (for example Groq/Gemini).
+**Honest limitation:** this is not a trained LLM. It supports selected English and
+Roman Urdu conversation patterns, greetings, basic small-talk, date/time and safe
+arithmetic. It cannot understand arbitrary topics like a modern language model.
+Unknown questions receive an honest fallback instead of fabricated answers.
 
 ## Endpoints
 
-- `GET /health`
-- `POST /chat` with JSON: `{"message":"hello"}`
-- `POST /v1/chat/completions` with an OpenAI-style `messages` array
+- \`GET /health\`
+- \`POST /chat\` with JSON: \`{"message":"salam","history":[]}\`
+- \`POST /v1/chat/completions\` with an OpenAI-compatible \`messages\` array
 
-If `ALEXA_AI_TOKEN` is set, POST requests require
-`Authorization: Bearer <ALEXA_AI_TOKEN>`.
+If \`ALEXA_AI_TOKEN\` is set, POST requests require
+\`Authorization: Bearer <ALEXA_AI_TOKEN>\`.
 
 ## Deploy on EthioDeploy
 
-- Set the app/root directory to `alexa_own_ai` if the platform supports it.
-- Build using the included Dockerfile, or use start command: `python app.py`.
-- Set `PORT` to the port supplied by the platform.
-- Optionally set `ALEXA_AI_TOKEN` as a secret environment variable.
+- Set the app/root directory to \`alexa_own_ai\` if supported.
+- Build with the included Dockerfile, or run \`python app.py\`.
+- Set \`PORT\` to the port supplied by the platform.
+- Set a long random \`ALEXA_AI_TOKEN\` secret and use the same token in the caller.
 
-## Resource limits
+## Memory and resource use
 
-This service uses only Python's standard library and does not load a model file.
-That makes it suitable for testing on a 256 MB class plan, subject to platform
-limits. It does not create unlimited AI capacity: host sleep, request limits and
-availability still apply.
+The service loads no model weights and uses only Python's standard library.
+It processes one request at a time to keep memory use predictable. Conversation
+history is accepted from the caller but is not stored on the server. This is
+suitable for testing on a 256 MB class plan, subject to the host's own limits.
 
-## Next stage
+## Important
 
-A real small language model needs substantially more memory than this microservice.
-Do not download or load a Qwen/Llama model into a 256 MB container. Keep this service
-as a basic fallback and use external providers for general responses.
+This does not remove third-party AI quotas or guarantee uptime. A full generative
+model needs substantially more memory. Keep Groq/Gemini/other configured providers
+for open-ended answers and use this service only as a lightweight offline fallback.
