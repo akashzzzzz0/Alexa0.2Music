@@ -246,7 +246,7 @@ def response_for(message, history):
             return "Haanji, dasso! Main sun rahi aan."
         return "Haan ji, bolo! Main sun rahi hoon."
     # A greeting plus Alexa's name or a casual call should be treated as a direct greeting.
-    if re.search(r"\b(alexa|oye|oy+|hello|hi|hey|baby)\b", t) and re.search(r"\b(alexa|oye|oy+|hello|hi|hey)\b", t):
+    if re.search(r"\balexa\b", t) and re.search(r"\b(oye|oy+|hello|hi|hey|baby)\b", t):
         if lang == "en":
             return "Hey! I'm here. What's up?"
         return "Oyyyy! Haan bolo, sun rahi hoon."
