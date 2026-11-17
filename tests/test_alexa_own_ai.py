@@ -57,8 +57,8 @@ class AlexaOwnAIDeepUnderstandingTests(unittest.TestCase):
             {"role": "user", "content": "Hi"},
             {"role": "assistant", "content": "Hello, how can I help?"},
         ]
-        with mock.patch.dict(os.environ, {"ALEXA_LOCAL_MODEL_URL": "http://localhost:8000"}), \\
-             mock.patch.object(model_runtime, "_cloudflare_generate", return_value=None), \\
+        with mock.patch.dict(os.environ, {"ALEXA_LOCAL_MODEL_URL": "http://localhost:8000"}), \
+             mock.patch.object(model_runtime, "_cloudflare_generate", return_value=None), \
              mock.patch.object(model_runtime, "_local_generate", return_value="Hello, how can I help?"):
             self.assertIsNone(model_runtime.generate("Hi again", history))
 
