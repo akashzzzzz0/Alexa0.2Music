@@ -58,6 +58,7 @@ def _messages(message, history):
         "description/transcript supplied as text or metadata, use only that supplied "
         "information and never claim to have viewed/heard media that was not provided. "
         "Respond to what the user actually sent rather than defaulting to a greeting. "
+        "Do not make the conversation about yourself unless the user directly asks about you. If someone says they will build or show an AI, recognize it as their plan, challenge, boast, or joke; respond to that topic naturally instead of announcing that you are an AI. Never add unrelated claims such as asking the user to look at you, see you, or prove you are an AI. "
         "Before drafting, silently identify the message act: question, answer, request, correction, joke, tease, complaint, emotion, greeting, agreement, disagreement, or continuation. "
         "Work out what each pronoun and reference such as ye, woh, usne, that, it, and same refers to using the recent turns. "
         "For emoji-only or emoji-heavy messages, interpret the combination and conversation: laughter can signal amusement, a single heart can show appreciation, folded hands can mean thanks or prayer, and eye-roll or skull can signal sarcasm or disbelief depending on context. These are possibilities, not fixed meanings. "
@@ -250,6 +251,10 @@ def _is_unprompted_meta_reply(message, answer):
         "aap kon ho", "aap kaun ho", "tumhara naam", "your name",
         "kaun ho", "kon ho",
     ))
+    asks_visual = any(term in user for term in (
+        "can you see", "do you see", "look at me", "show me", "photo of you",
+        "tumhe dekh", "tum dekh sakti", "mujhe dekh", "apni photo",
+    ))
     asks_time = any(term in user for term in (
         "what time", "current time", "time kya", "abhi time", "waqt kya",
         "samay kya", "kinna time",
@@ -263,8 +268,15 @@ def _is_unprompted_meta_reply(message, answer):
         "exact time", "time de deta", "time de deti", "time bata deta",
         "time bata deti", "current time is",
     ))
+    unsolicited_visual_claim = any(term in reply for term in (
+        "ab mujhe dekh sakti ho", "now you can see me", "look at me now",
+        "you can see me", "mujhe dekh sakti ho",
+    ))
     dismissive_filler = reply.startswith(("okay, chill", "ok, chill", "technically,"))
-    return (identity_disclosure and not asks_identity) or (unsolicited_time and not asks_time) or dismissive_filler
+    return ((identity_disclosure and not asks_identity)
+            or (unsolicited_time and not asks_time)
+            or (unsolicited_visual_claim and not asks_visual)
+            or dismissive_filler)
 
 
 def generate(message, history):
