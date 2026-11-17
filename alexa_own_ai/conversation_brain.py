@@ -109,11 +109,11 @@ def respond(message, normalized, language, history):
 
     # Reassurance: the user is asking whether Alexa understands them.
     # Match natural Roman Urdu/Hindi variants instead of sending a generic fallback.
-    if re.search(r"\\b(tum|aap)\\b", t) and re.search(r"\\b(mujhe|mujhko|meri baat|my)\\b", t) and re.search(r"\\b(samajh|samaj|understand)\\w*\\b", t):
-        if re.search(r"\\b(sakti|sakte|sakta|paogi|paoge|can|right|na|hai|ho)\\b", t):
+    if re.search(r"\b(tum|aap)\b", t) and re.search(r"\b(mujhe|mujhko|meri baat|my)\b", t) and re.search(r"\b(samajh|samaj|understand)\\w*\b", t):
+        if re.search(r"\b(sakti|sakte|sakta|paogi|paoge|can|right|na|hai|ho)\b", t):
             return ("Yes, I can understand you. You can speak naturally—I’m listening." if not roman
                     else "Haan ji, bilkul samajh sakti hoon 😊 Tum apni baat normally batao, main dhyan se sun rahi hoon.")
-    if re.search(r"\\b(do you understand me|you understand me|can you understand me)\\b", t):
+    if re.search(r"\b(do you understand me|you understand me|can you understand me)\b", t):
         return ("Yes, I can understand you. You can speak naturally—I’m listening." if not roman
                 else "Haan ji, bilkul samajh sakti hoon 😊 Tum apni baat normally batao, main dhyan se sun rahi hoon.")
 
