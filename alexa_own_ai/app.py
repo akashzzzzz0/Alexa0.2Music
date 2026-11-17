@@ -263,7 +263,10 @@ def response_for(message, history, context=None):
 
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
-    brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
+    if context is None:
+        brain_reply = conversation_respond(raw, t or raw, lang, history)
+    else:
+        brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
 
