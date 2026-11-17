@@ -8,8 +8,8 @@ import time
 
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
-MAX_CONTEXT_MESSAGES = 10
-MAX_MESSAGE_CHARS = 900
+MAX_CONTEXT_MESSAGES = 14
+MAX_MESSAGE_CHARS = 1400
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
@@ -51,7 +51,13 @@ def _messages(message, history):
         "entire recent conversation before answering; understand the user's "
         "actual intent, tone, teasing, sarcasm, typos, speech-to-text errors, "
         "incomplete sentences, and follow-up references instead of reacting to "
-        "isolated keywords. Treat emoji and emoji combinations as meaningful "
+        "isolated keywords. Read the turns chronologically and give extra weight "
+        "to the latest relevant exchange; resolve short replies against the "
+        "question or point immediately before them. Distinguish a correction "
+        "from a new request, and do not treat a quoted or mentioned phrase as "
+        "the user's own intent. If two interpretations remain equally plausible, "
+        "ask one short, specific clarification rather than guessing. "
+        "Treat emoji and emoji combinations as meaningful "
         "communication: infer their likely tone from the words and recent context, "
         "including emoji-only messages, but do not pretend an ambiguous emoji has "
         "one certain meaning. If the message contains a sticker, image, or voice "
@@ -136,7 +142,7 @@ def _cloudflare_generate(messages, timeout=None):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 144,
+        "max_completion_tokens": 192,
         "temperature": 0.7,
         "reasoning_effort": None,
         "chat_template_kwargs": {
@@ -215,7 +221,7 @@ def _local_generate(message, history, timeout=None):
         "model": model_name,
         "messages": _messages(message, history),
         "temperature": 0.7,
-        "max_tokens": 144,
+        "max_tokens": 192,
     }).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
