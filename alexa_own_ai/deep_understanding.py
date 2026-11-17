@@ -15,6 +15,7 @@ _EMOJI_GROUPS = (
     (("😡", "🤬", "😤"), "frustrated_possible"),
     (("👍", "👌", "✅"), "acknowledgement_or_approval"),
     (("🤔", "❓", "⁉️"), "thinking_or_questioning"),
+    (("🫠",), "awkward_or_overwhelmed_possible"),
 )
 
 _CORRECTION = (
@@ -86,6 +87,11 @@ def analyze(message, history):
         text,
     ))
     correction = correction or owner_assertion
+    ranking_question = bool(re.search(
+        r"\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b.{0,32}\b(?:kon|kaun|who|hai|is)\b|"
+        r"\b(?:who|kon|kaun)\b.{0,32}\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b",
+        text,
+    ))
     question = "?" in raw or "؟" in raw or bool(re.search(_QUESTION, text))
     request = bool(re.search(_REQUEST, text))
     greeting = bool(re.fullmatch(
@@ -118,6 +124,8 @@ def analyze(message, history):
     # than as a fresh, isolated question/request classification.
     if owner_assertion:
         act = "owner_relationship_assertion"
+    elif ranking_question:
+        act = "ranking_or_comparison_question"
     elif correction:
         act = "correction_or_disagreement"
     elif greeting:
@@ -126,6 +134,8 @@ def analyze(message, history):
         act = "gratitude"
     elif apology:
         act = "apology"
+    elif ranking_question:
+        act = "ranking_or_comparison_question"
     elif short and previous_assistant_asked and not question and not request:
         act = "answer_to_previous_question"
     elif request:
@@ -157,6 +167,7 @@ def analyze(message, history):
         "owner_relationship_assertion": "accept_the_explicit_owner_statement_as_conversation_context_and_acknowledge_it_without_claiming_it_authenticates_privileged_permissions",
         "correction_or_disagreement": "acknowledge_correction_first_then_replace_the_wrong_interpretation",
         "question": "answer_the_actual_question_first_and_cover_each_requested_part",
+        "ranking_or_comparison_question": "use_explicit_ranking_evidence_from_recent_turns_or_caller_context;_if_missing_ask_what_ranking_the_user_means_and_never_guess_or_claim_to_be_number_one",
         "request": "identify_the_requested_outcome_and_do_it_without_answering_only_a_surface_keyword",
         "answer_to_previous_question": "connect_this_answer_to_the_assistant_question_and_continue_that_thread",
         "contextual_followup": "resolve_pronouns_and_omitted_subjects_from_the_closest_relevant_turns",
@@ -179,6 +190,7 @@ def analyze(message, history):
         "explicit_owner_relationship_statement=" + ("yes" if owner_assertion else "no"),
         "contains_request=" + ("yes" if request else "no"),
         "contains_question=" + ("yes" if question else "no"),
+        "asks_about_number_one_or_ranking=" + ("yes" if ranking_question else "no"),
         "tone_cues=" + (",".join(tones) if tones else "none_detected"),
         "emoji_cues=" + (",".join(emoji_cues) if emoji_cues else "none_detected"),
         "likely_contextual_reference=" + ("yes" if refers_back else "no"),
