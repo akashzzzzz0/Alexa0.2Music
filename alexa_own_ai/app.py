@@ -387,8 +387,6 @@ def response_for(message, history):
     # Only use a clarification fallback when no generative model is configured
     # or the provider is temporarily unavailable.
     if lang == "en":
-        return "I'm not fully sure what you mean yet. Can you give me one small hint?"
-    if lang == "en":
         return "I'm listening. Tell me a little more about what you mean."
     if lang == "pa":
         return "Haanji, thoda hor dasso. Main samajh rahi aan."

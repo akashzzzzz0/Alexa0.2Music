@@ -3,7 +3,22 @@ import tempfile
 import unittest
 from unittest import mock
 
-from alexa_own_ai import app
+from alexa_own_ai import app, model_runtime
+
+
+class AlexaOwnAIModelQualityTests(unittest.TestCase):
+    def test_exact_previous_assistant_reply_is_rejected(self):
+        history = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "I'm here. What's up?"},
+        ]
+        self.assertTrue(model_runtime._is_repeated_reply(history, "  I'M HERE. What's up?! "))
+        self.assertFalse(model_runtime._is_repeated_reply(history, "I'm listening. Go ahead."))
+
+    def test_repeated_reply_guard_ignores_history_without_assistant_turn(self):
+        self.assertFalse(model_runtime._is_repeated_reply(
+            [{"role": "user", "content": "Hi"}], "Hi there"
+        ))
 
 
 class AlexaOwnAILanguageTests(unittest.TestCase):

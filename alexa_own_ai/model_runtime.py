@@ -250,6 +250,22 @@ def _local_generate(message, history, timeout=None):
         return None
 
 
+def _is_repeated_reply(history, answer):
+    """Reject an exact repeat of the immediately previous assistant turn."""
+    candidate = " ".join(str(answer or "").casefold().split()).strip(" .!?")
+    if not candidate:
+        return False
+    previous = next(
+        (
+            " ".join(str(item.get("content", "")).casefold().split()).strip(" .!?")
+            for item in reversed(history or [])
+            if isinstance(item, dict) and item.get("role") == "assistant"
+        ),
+        "",
+    )
+    return bool(previous and candidate == previous)
+
+
 def _is_unprompted_meta_reply(message, answer):
     """Reject conspicuously off-topic identity/time filler from a generative model."""
     user = str(message or "").strip().lower()
@@ -302,11 +318,12 @@ def generate(message, history):
     deadline = started + MAX_TOTAL_INFERENCE_SECONDS
     messages = _messages(message, history)
     answer = _cloudflare_generate(messages, timeout=min(_timeout(), max(1.0, deadline - time.monotonic())))
-    if answer and not _is_unprompted_meta_reply(message, answer):
+    if answer and not _is_unprompted_meta_reply(message, answer) and not _is_repeated_reply(history, answer):
         print("Alexa inference completed via Cloudflare in {:.2f}s.".format(time.monotonic() - started), flush=True)
         return answer
     if answer:
-        print("Discarding off-topic Alexa identity/time filler from Cloudflare response.", flush=True)
+        reason = "repeated reply" if _is_repeated_reply(history, answer) else "off-topic identity/time filler"
+        print("Discarding {} from Cloudflare response.".format(reason), flush=True)
 
     # Keep the optional self-hosted fallback inside one overall latency budget;
     # do not let two sequential provider timeouts make a Telegram reply feel stuck.
@@ -317,5 +334,6 @@ def generate(message, history):
             print("Alexa inference completed via self-hosted model in {:.2f}s.".format(time.monotonic() - started), flush=True)
             return answer
         if answer:
-            print("Discarding off-topic Alexa identity/time filler from local model response.", flush=True)
+            reason = "repeated reply" if _is_repeated_reply(history, answer) else "off-topic identity/time filler"
+            print("Discarding {} from local model response.".format(reason), flush=True)
     return None
