@@ -9,7 +9,7 @@ except ImportError:
     from model_runtime import generate as _model_generate
 
 
-def route_response(message, normalized, language, history):
+def route_response(message, normalized, language, history, context=None):
     """Use trusted local dialogue matches first, then the hosted LLM for open chat.
 
     Return None for local app.py handlers (math, date/time, and other exact
@@ -32,4 +32,4 @@ def route_response(message, normalized, language, history):
     # Open-ended conversation, factual questions, and contextual follow-ups
     # belong to the generative model. If it is unavailable, app.py retains its
     # existing lightweight fallback behavior.
-    return _model_generate(raw, history)
+    return _model_generate(raw, history, context=context)
