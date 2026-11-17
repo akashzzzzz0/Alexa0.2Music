@@ -48,7 +48,7 @@ class AlexaOwnAIDeepUnderstandingTests(unittest.TestCase):
             "Nahi, mera matlab kuch aur tha",
             [{"role": "assistant", "content": "So you agree?"}],
         )
-        analysis = messages[1]["content"]
+        analysis = messages[0]["content"]
         self.assertIn("message_act=correction_or_disagreement", analysis)
         self.assertEqual(messages[-1]["content"], "Nahi, mera matlab kuch aur tha")
 
