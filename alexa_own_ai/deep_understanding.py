@@ -40,40 +40,40 @@ def analyze(message, history):
     previous_assistant = _last(history, "assistant")
     previous_user = _last(history, "user")
     previous_assistant_asked = bool(
-        previous_assistant and re.search(r"[?؟]\\s*$", previous_assistant)
+        previous_assistant and re.search(r"[?؟]\s*$", previous_assistant)
     )
 
     correction = bool(re.search(
-        r"\\b(no|nahi|nahin|nhi|galat|wrong|mera matlab|matlab ye|i meant|"
-        r"that's not|that is not|you misunderstood|samjho)\\b", text
+        r"\b(no|nahi|nahin|nhi|galat|wrong|mera matlab|matlab ye|i meant|"
+        r"that's not|that is not|you misunderstood|samjho)\b", text
     ))
     question = "?" in raw or "؟" in raw or bool(re.search(
-        r"\\b(what|why|when|where|who|which|how|kya|kyun|kaise|kaisa|kab|kahan|"
-        r"kon|kaun|matlab|mtlb)\\b", text
+        r"\b(what|why|when|where|who|which|how|kya|kyun|kaise|kaisa|kab|kahan|"
+        r"kon|kaun|matlab|mtlb)\b", text
     ))
     request = bool(re.search(
-        r"\\b(please|plz|can you|could you|help me|batao|btao|samjhao|karo|"
-        r"kar do|likh do|explain|tell me|show me)\\b", text
+        r"\b(please|plz|can you|could you|help me|batao|btao|samjhao|karo|"
+        r"kar do|likh do|explain|tell me|show me)\b", text
     ))
     greeting = bool(re.fullmatch(
-        r"[\\W_]*(hi|hello|hey|salam|assalam o alaikum|suno|oye)[\\W_]*", text
+        r"[\W_]*(hi|hello|hey|salam|assalam o alaikum|suno|oye)[\W_]*", text
     ))
-    gratitude = bool(re.search(r"\\b(thanks|thank you|shukriya|meharbani)\\b", text))
-    apology = bool(re.search(r"\\b(sorry|maaf|my bad|meri galti)\\b", text))
+    gratitude = bool(re.search(r"\b(thanks|thank you|shukriya|meharbani)\b", text))
+    apology = bool(re.search(r"\b(sorry|maaf|my bad|meri galti)\b", text))
     frustration = bool(re.search(
-        r"\\b(annoyed|angry|frustrated|bakwas|kya yaar|samajh nahi|"
-        r"nahi samajhte|not listening|useless|wtf)\\b", text
+        r"\b(annoyed|angry|frustrated|bakwas|kya yaar|samajh nahi|"
+        r"nahi samajhte|not listening|useless|wtf)\b", text
     ))
-    playful = bool(re.search(r"\\b(lol|lmao|haha|hehe|mazak|mazaak)\\b", text))
+    playful = bool(re.search(r"\b(lol|lmao|haha|hehe|mazak|mazaak)\b", text))
     emotional = bool(re.search(
-        r"\\b(sad|udaas|pareshan|worried|tension|happy|khush|excited|"
-        r"hurt|dukhi|pareshani)\\b", text
+        r"\b(sad|udaas|pareshan|worried|tension|happy|khush|excited|"
+        r"hurt|dukhi|pareshani)\b", text
     ))
     short = len(words) <= 4
     followup = short and bool(previous_assistant)
     refers_back = bool(re.search(
-        r"\\b(it|that|this|same|ye|woh|us|iska|uska|kyun|kaise|matlab|mtlb|"
-        r"phir|aur|haan|han|acha|achha|ok|okay)\\b", text
+        r"\b(it|that|this|same|ye|woh|us|iska|uska|kyun|kaise|matlab|mtlb|"
+        r"phir|aur|haan|han|acha|achha|ok|okay)\b", text
     ))
     emoji_cues = _emoji_cues(raw)
 
@@ -134,4 +134,4 @@ def analyze(message, history):
         "reply_strategy=" + strategies[act],
         "Use the full conversation to verify these cues. If a cue conflicts with the actual words or context, trust the conversation. Never state this analysis to the user.",
     ]
-    return "\\n".join(lines)
+    return "\n".join(lines)
