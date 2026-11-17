@@ -1,4 +1,4 @@
-"""Tests for the optional self-hosted model adapter."""
+"""Tests for the optional hosted and self-hosted model adapters."""
 import json
 import os
 import unittest
@@ -53,6 +53,8 @@ class ModelRuntimeTests(unittest.TestCase):
                 {"role": "user", "content": "Alexa suno"},
                 {"role": "assistant", "content": "Haan bolo"},
             ])
+            self.assertEqual(model_runtime.status()["provider"], "cloudflare-workers-ai")
+            self.assertEqual(model_runtime.status()["model"], "@cf/zai-org/glm-4.7-flash")
         self.assertEqual(reply, "Haan, main samajh gayi.")
         request = mocked.call_args.args[0]
         self.assertIn("/ai/run/@cf/zai-org/glm-4.7-flash", request.full_url)
@@ -61,8 +63,6 @@ class ModelRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["messages"][-1], {
             "role": "user", "content": "Tum samajh rahi ho?"
         })
-        self.assertEqual(model_runtime.status()["provider"], "cloudflare-workers-ai")
-        self.assertEqual(model_runtime.status()["model"], "@cf/zai-org/glm-4.7-flash")
 
     def test_configured_model_receives_context_and_returns_reply(self):
         with patch.dict(os.environ, {
