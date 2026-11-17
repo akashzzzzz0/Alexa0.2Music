@@ -142,7 +142,7 @@ class ModelRuntimeTests(unittest.TestCase):
             for i in range(18)
         ]
         messages = model_runtime._messages("latest", history)
-        self.assertEqual(len(messages), 15)
+        self.assertEqual(len(messages), 16)
         self.assertEqual(messages[-2]["content"], "17" + ("x" * 1398))
         self.assertEqual(messages[-1]["content"], "latest")
         self.assertIn("latest relevant exchange", messages[0]["content"])
