@@ -14,7 +14,7 @@ import re
 import sqlite3
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Resolve the service directory explicitly so the dialogue module is found even
 # when the platform launches this file with a different working directory.
@@ -250,10 +250,7 @@ def response_for(message, history):
     if brain_reply:
         return brain_reply
 
-    # Use the generative model for open-ended messages the dialogue layer cannot classify.
-    model_reply = local_model_generate(raw, history)
-    if model_reply:
-        return model_reply
+    # Deterministic intent and short-follow-up rules run before paid/remote inference.
 
     # Natural Roman Hindi/Urdu small talk and conversational repair.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
@@ -376,9 +373,16 @@ def response_for(message, history):
     # Vary unknown-message prompts so unrelated messages don't receive a repeated canned line.
     if lang == "en":
         return "I want to get what you mean. Can you say that another way?"
+    # Only genuinely open-ended messages reach the remote model, after all
+    # local intent and conversational-repair rules have had a chance to answer.
+    model_reply = local_model_generate(raw, history)
+    if model_reply:
+        return model_reply
+    if lang == "en":
+        return "I'm listening. Tell me a little more about what you mean."
     if lang == "pa":
-        return "Main tuhadi gall samajhna chaundi haan. Thoda hor dasso ji?"
-    return "Main tumhari baat samajhna chahti hoon. Zara apne words mein batao na?"
+        return "Haanji, thoda hor dasso. Main samajh rahi aan."
+    return "Haan, main sun rahi hoon. Aage batao?"
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
@@ -447,4 +451,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print("Alexa Own AI microservice listening on port", PORT, flush=True)
-    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
