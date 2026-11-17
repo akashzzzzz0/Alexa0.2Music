@@ -67,6 +67,23 @@ def respond(message, normalized, language, history):
     prev = last_assistant.lower()
     words = set(t.split())
 
+    # Farewells are complete conversational acts, not ambiguous short replies.
+    # Recognize combined good-night / tomorrow messages before generic follow-up
+    # handling so the model cannot turn a clear sign-off into a clarification loop.
+    farewell = re.search(
+        r"\\b(good\\s*night|gn|nighty\\s*night|sleep\\s*well|sweet\\s*dreams|allah\\s*hafiz|khuda\\s*hafiz)\\b",
+        t,
+    )
+    tomorrow = re.search(r"\\b(tomorrow|kal|next\\s*day)\\b", t)
+    signoff = re.search(
+        r"\\b(bye|goodbye|see\\s+you|meet|milte|milenge|talk|chat|baat|phir\\s+mil|then|okay|ok)\\b",
+        t,
+    )
+    if farewell or (tomorrow and signoff):
+        if language == "en":
+            return "Good night! Sleep well. We'll talk tomorrow. Take care! 😊"
+        return "Good night! Aaram se sona. Kal phir baat karenge. Apna khayal rakhna! 😊"
+
     # Calls and greetings should sound like natural chat, not a clarification.
     if re.search(r"\b(alexa\s+)?(baby|babu)\b", t):
         return "Haan bolo, kya baat hai? 😊" if roman else "Hey, what's up?"
