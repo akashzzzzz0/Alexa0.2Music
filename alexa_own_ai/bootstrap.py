@@ -15,8 +15,8 @@ except ImportError:
 _original_messages = model_runtime._messages
 
 
-def _alexa_messages(message, history):
-    messages = _original_messages(message, history)
+def _alexa_messages(message, history, context=None):
+    messages = _original_messages(message, history, context=context)
     messages[0]["content"] += (
         " You are Alexa and use a friendly, feminine conversational voice. "
         "In Roman Urdu/Hindi, use natural feminine forms such as 'kar rahi hoon' "

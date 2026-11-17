@@ -9,9 +9,13 @@ import time
 try:
     from . import deep_understanding
     from .context_envelope import format_context
+    from .conversation_intelligence import build_context_summary
+    from .personality_profile import build_guidance
 except ImportError:  # Support the service's legacy direct-module launch path.
     import deep_understanding
     from context_envelope import format_context
+    from conversation_intelligence import build_context_summary
+    from personality_profile import build_guidance
 
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
@@ -117,6 +121,8 @@ def _messages(message, history, context=None):
         "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
     system_prompt += "\n\n" + deep_understanding.analyze(message, history)
+    system_prompt += "\n\n" + build_context_summary(message, history)
+    system_prompt += "\n\n" + build_guidance(message, history)
     reference_context = format_context(context)
     if reference_context:
         system_prompt += "\n\n" + reference_context
