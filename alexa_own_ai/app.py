@@ -13,7 +13,7 @@ import os
 import re
 import sqlite3
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
@@ -355,4 +355,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print("Alexa Own AI microservice listening on port", PORT, flush=True)
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
