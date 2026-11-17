@@ -126,7 +126,7 @@ class AlexaOwnAIMemoryTests(unittest.TestCase):
             {"role": "user", "content": "Aaj school mein ek interesting baat hui"},
             {"role": "assistant", "content": "Achha, phir kya hua?"},
         ]
-        self.assertIn("phir batao", app.response_for("Haan", history).lower())
+        self.assertIn("phir kya hua", app.response_for("Haan", history).lower())
         self.assertIn("main sun rahi hoon", app.response_for("Aur", history).lower())
 
     def test_caller_history_restores_context_when_service_database_is_empty(self):
