@@ -43,6 +43,9 @@ API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
 MAX_HISTORY = 20
+MAX_MEMORY_ITEMS = 40
+MAX_MEMORY_KEY_CHARS = 80
+MAX_MEMORY_VALUE_CHARS = 800
 INDIA_TZ = ZoneInfo("Asia/Kolkata")
 DB_LOCK = threading.RLock()
 
@@ -223,7 +226,77 @@ def memory_connection():
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("CREATE TABLE IF NOT EXISTS turns (conversation TEXT NOT NULL, seq INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_seq ON turns(conversation, seq)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS memory_items ("
+        "scope TEXT NOT NULL, memory_key TEXT NOT NULL, memory_value TEXT NOT NULL, "
+        "updated_at TEXT NOT NULL, PRIMARY KEY(scope, memory_key))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_scope_updated ON memory_items(scope, updated_at)")
     return conn
+
+
+def _memory_scope(value):
+    return str(value or "").strip()[:256]
+
+
+def save_memory_items(scope, updates=None, forget_keys=None, forget_all=False):
+    """Persist only explicit, caller-approved scalar memory updates."""
+    scope = _memory_scope(scope)
+    if not scope:
+        return {"saved": 0, "deleted": 0}
+    updates = updates if isinstance(updates, dict) else {}
+    forget_keys = forget_keys if isinstance(forget_keys, list) else []
+    saved = deleted = 0
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    blocked = {"password", "token", "secret", "api_key", "apikey", "authorization"}
+    with DB_LOCK:
+        with memory_connection() as conn:
+            if forget_all:
+                cur = conn.execute("DELETE FROM memory_items WHERE scope=?", (scope,))
+                deleted += cur.rowcount
+            else:
+                for raw_key in forget_keys[:MAX_MEMORY_ITEMS]:
+                    key = str(raw_key or "").strip()[:MAX_MEMORY_KEY_CHARS]
+                    if key:
+                        cur = conn.execute("DELETE FROM memory_items WHERE scope=? AND memory_key=?", (scope, key))
+                        deleted += max(cur.rowcount, 0)
+            for raw_key, raw_value in list(updates.items())[:MAX_MEMORY_ITEMS]:
+                key = str(raw_key or "").strip()[:MAX_MEMORY_KEY_CHARS]
+                if not key or key.casefold() in blocked:
+                    continue
+                if not isinstance(raw_value, (str, int, float, bool)):
+                    continue
+                value = str(raw_value).strip()[:MAX_MEMORY_VALUE_CHARS]
+                if not value:
+                    continue
+                conn.execute(
+                    "INSERT INTO memory_items(scope, memory_key, memory_value, updated_at) "
+                    "VALUES(?,?,?,?) ON CONFLICT(scope, memory_key) DO UPDATE SET "
+                    "memory_value=excluded.memory_value, updated_at=excluded.updated_at",
+                    (scope, key, value, now),
+                )
+                saved += 1
+            conn.execute(
+                "DELETE FROM memory_items WHERE scope=? AND memory_key NOT IN "
+                "(SELECT memory_key FROM memory_items WHERE scope=? ORDER BY updated_at DESC LIMIT ?)",
+                (scope, scope, MAX_MEMORY_ITEMS),
+            )
+    return {"saved": saved, "deleted": deleted}
+
+
+def get_memory_items(scope):
+    scope = _memory_scope(scope)
+    if not scope:
+        return {}
+    with DB_LOCK:
+        with memory_connection() as conn:
+            rows = conn.execute(
+                "SELECT memory_key, memory_value FROM memory_items WHERE scope=? "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (scope, MAX_MEMORY_ITEMS),
+            ).fetchall()
+    return {key: value for key, value in rows}
+
 
 def get_history(conversation, supplied, current_message=""):
     supplied_messages = [x for x in supplied if isinstance(x, dict)]
