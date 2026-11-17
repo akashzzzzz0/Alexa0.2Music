@@ -1,43 +1,69 @@
-# Alexa Own AI — low-memory local assistant
+# Alexa Own AI — low-memory multilingual assistant
 
-A dependency-free Python HTTP service intended for very small containers (including
-256 MB class plans). It provides a small offline intent/utility engine.
+A dependency-free Python HTTP service for small containers such as a 256 MB class
+plan. It uses Python's standard library only: no downloaded model weights, no
+third-party AI API calls, and no external provider keys.
 
-**Honest limitation:** this is not a trained LLM. It supports selected English and
-Roman Urdu conversation patterns, greetings, basic small-talk, date/time and safe
-arithmetic. It cannot understand arbitrary topics like a modern language model.
-Unknown questions receive an honest fallback instead of fabricated answers.
+## What it can do
 
-## Endpoints
+- Understand common conversational phrases in English, Roman Urdu, Roman Hindi,
+  and Roman Punjabi.
+- Accept Urdu-script and Devanagari Hindi input and transliterate it internally.
+- Keep replies in English for English input; other supported languages are
+  answered in Roman text (never Urdu or Devanagari script).
+- Handle greetings, small talk, basic emotional acknowledgements, jokes,
+  date/time and safe arithmetic.
+- Use the latest five messages as context when a stable conversation identifier
+  is supplied.
+- Store conversation turns in SQLite, separately per conversation.
 
-- \`GET /health\`
-- \`POST /chat\` with JSON: \`{"message":"salam","history":[]}\`
-- \`POST /v1/chat/completions\` with an OpenAI-compatible \`messages\` array
+**Important limitation:** this is an improved offline conversational engine,
+not a trained generative language model. It cannot reliably answer arbitrary
+factual, technical, current-events, or open-ended questions. Its transliteration
+and language detection are lightweight approximations, not full linguistic
+models. It should ask for clarification or be honest when it does not know.
 
-If \`ALEXA_AI_TOKEN\` is set, POST requests require
-\`Authorization: Bearer <ALEXA_AI_TOKEN>\`.
+## API
 
-## Deploy on EthioDeploy
+- `GET /health`
+- `POST /chat`
+- `POST /v1/chat/completions` (OpenAI-compatible request/response shape)
 
-- Set the app/root directory to \`alexa_own_ai\` if supported.
-- Build with the included Dockerfile, or run \`python app.py\`.
-- Set \`PORT\` to the port supplied by the platform.
-- Set a long random \`ALEXA_AI_TOKEN\` secret and use the same token in the caller.
+Example `/chat` request:
 
-## Memory and resource use
+```json
+{
+  "conversation_id": "telegram:chat_id:user_id",
+  "message": "Ki haal aa?"
+}
+```
 
-The service loads no model weights and uses only Python's standard library.
-It processes one request at a time to keep memory use predictable. Conversation
-history is accepted from the caller but is not stored on the server. This is
-suitable for testing on a 256 MB class plan, subject to the host's own limits.
+For durable per-chat memory, the caller should pass a stable, non-secret
+`conversation_id` (or `chat_id` and `user_id`) on every request. Without an
+identifier, supplied request history can be used for that request, but server
+memory cannot be safely separated between users.
 
-## Important
+If `ALEXA_AI_TOKEN` is set, POST requests require
+`Authorization: Bearer <ALEXA_AI_TOKEN>`.
 
-This does not remove third-party AI quotas or guarantee uptime. A full generative
-model needs substantially more memory. Keep Groq/Gemini/other configured providers
-for open-ended answers and use this service only as a lightweight offline fallback.
+## EthioDeploy setup
 
+- Set the service root directory to `alexa_own_ai` if the deployment UI asks.
+- Build with the included Dockerfile or run `python app.py`.
+- Use the platform-provided `PORT` value (default is 3000).
+- Set `ALEXA_AI_TOKEN` as a secret and use the same value in the bot's
+  `ALEXA_OWN_AI_API_KEY` setting.
+- Set `ALEXA_AI_DB_PATH` to a file on a persistent volume if EthioDeploy offers
+  one. The default is `alexa_memory.sqlite3` in the application directory.
+  SQLite data can survive process restarts, but it cannot survive container
+  replacement/redeployment unless that path is backed by persistent storage.
 
-## Download the ZIP
+The service is intentionally lightweight for a 256 MB environment. A real
+generative model needs substantially more RAM and compute. This service does
+not silently call Gemini, Groq, or any other external AI provider.
 
-This folder is packaged automatically by the public GitHub Actions workflow named **Build Alexa Own AI ZIP**. Open the repository's **Actions** tab, choose the latest successful run, and download the `alexa-own-ai` artifact. The source folder itself is also public in this repository.
+## ZIP artifact
+
+The public repository's **Build Alexa Own AI ZIP** GitHub Actions workflow
+packages this folder. Download the artifact from the latest successful run in
+the repository's Actions tab.

@@ -5,6 +5,12 @@ on:
   push:
     paths:
       - "alexa_own_ai/**"
+      - "tests/test_alexa_own_ai.py"
+      - ".github/workflows/build-alexa-own-ai-zip.yml"
+  pull_request:
+    paths:
+      - "alexa_own_ai/**"
+      - "tests/test_alexa_own_ai.py"
       - ".github/workflows/build-alexa-own-ai-zip.yml"
 
 permissions:
@@ -16,6 +22,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Validate Python syntax and behavior
+        run: |
+          python -m py_compile alexa_own_ai/app.py
+          python -m unittest discover -s tests -p 'test_alexa_own_ai.py' -v
       - name: Create ZIP
         run: |
           cd alexa_own_ai

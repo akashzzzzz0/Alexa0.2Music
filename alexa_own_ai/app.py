@@ -1,8 +1,8 @@
-"""Low-memory local conversation engine for Alexa.
+"""Alexa Own AI: low-memory multilingual conversational engine.
 
-Dependency-free and designed for small containers. This is a lightweight intent/
-utility engine, not a trained language model. It never pretends to know answers
-outside its supported intents.
+This is an offline intent/context engine, not a trained generative LLM.
+It uses only the Python standard library and keeps the latest five turns
+per conversation in SQLite. It never calls third-party AI providers.
 """
 import ast
 import datetime as dt
@@ -11,124 +11,287 @@ import json
 import math
 import os
 import re
+import sqlite3
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# EthioDeploy injects PORT at runtime. 3000 is also the safe platform default.
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
+DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
-MAX_HISTORY = 12
+MAX_HISTORY = 5
+DB_LOCK = threading.RLock()
+
+# Approximate transliteration for common Urdu and Hindi chat vocabulary.
+URDU = {
+"ا":"a","آ":"aa","ب":"b","پ":"p","ت":"t","ٹ":"t","ث":"s","ج":"j","چ":"ch","ح":"h","خ":"kh","د":"d","ڈ":"d","ذ":"z","ر":"r","ڑ":"r","ز":"z","ژ":"zh","س":"s","ش":"sh","ص":"s","ض":"z","ط":"t","ظ":"z","ع":"","غ":"gh","ف":"f","ق":"q","ک":"k","گ":"g","ل":"l","م":"m","ن":"n","ں":"n","و":"o","ؤ":"o","ہ":"h","ھ":"h","ۃ":"h","ء":"","ئ":"i","ی":"i","ي":"i","ك":"k","ى":"a","ے":"e","َ":"a","ِ":"i","ُ":"u","ّ":"","ً":"an","ٍ":"in","ٌ":"un","ٓ":""
+}
+DEV = {
+"अ":"a","आ":"aa","इ":"i","ई":"ee","उ":"u","ऊ":"oo","ऋ":"ri","ए":"e","ऐ":"ai","ओ":"o","औ":"au",
+"क":"k","ख":"kh","ग":"g","घ":"gh","ङ":"n","च":"ch","छ":"chh","ज":"j","झ":"jh","ञ":"n",
+"ट":"t","ठ":"th","ड":"d","ढ":"dh","ण":"n","त":"t","थ":"th","द":"d","ध":"dh","न":"n",
+"प":"p","फ":"ph","ब":"b","भ":"bh","म":"m","य":"y","र":"r","ल":"l","व":"v","श":"sh","ष":"sh","स":"s","ह":"h",
+"क्ष":"ksh","त्र":"tr","ज्ञ":"gy","ड़":"r","ढ़":"rh","ँ":"n","ं":"n","ः":"h","़":"",
+"ा":"a","ि":"i","ी":"ee","ु":"u","ू":"oo","ृ":"ri","े":"e","ै":"ai","ो":"o","ौ":"au","्":"","़":""
+}
+DEV_CONS = set("कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहड़ढ़")
+
+def transliterate(text):
+    out = []
+    i = 0
+    while i < len(text):
+        pair = text[i:i+2]
+        if pair in DEV:
+            out.append(DEV[pair]); i += 2; continue
+        ch = text[i]
+        if ch in DEV:
+            # Inherent 'a' after a consonant unless a vowel sign or virama follows.
+            val = DEV[ch]
+            if ch in DEV_CONS:
+                nxt = text[i+1:i+2]
+                if nxt not in ("्","ा","ि","ी","ु","ू","ृ","े","ै","ो","ौ"):
+                    val += "a"
+            out.append(val)
+        elif ch in URDU:
+            out.append(URDU[ch])
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
 
 def normalize(value):
-    value = str(value or "").strip().lower()
-    value = value.replace("’", "'").replace("’", "'")
-    value = re.sub(r"[^\w\s+*/().%-]", " ", value, flags=re.UNICODE)
+    value = transliterate(str(value or "").strip().lower())
+    value = value.replace("’", "'").replace("‘", "'").replace("،", " ")
+    value = re.sub(r"[^\w\s+*/().%\-]", " ", value, flags=re.UNICODE)
     return re.sub(r"\s+", " ", value).strip()
 
-def has_any(text, phrases):
-    return any(p in text for p in phrases)
+def script_of(value):
+    s = str(value or "")
+    if any("\u0900" <= c <= "\u097f" for c in s):
+        return "hi"
+    if any("\u0600" <= c <= "\u06ff" for c in s):
+        return "ur"
+    return "roman"
+
+def detect_language(raw):
+    script = script_of(raw)
+    if script == "hi":
+        return "hi"
+    if script == "ur":
+        return "ur"
+    t = normalize(raw)
+    if any(phrase in t for phrase in ("kya haal hai", "kya haal hain", "kaisay ho", "kese ho")):
+        return "ur"
+    words = set(t.split())
+    scores = {
+        "pa": len(words & {"ki", "aa", "assi", "tussi", "tainu", "menu", "veere", "yaar", "kiwen", "kida", "vadhiya", "changa", "ji", "oye", "praa", "paji", "tuhada", "tuhanu", "sada", "sadde", "kithe", "kithhe", "vich", "naal", "hor", "balle", "ve", "ae"}),
+        "hi": len(words & {"hai", "kaise", "kaisa", "kaisi", "mujhe", "tumhe", "tum", "kyun", "kya", "accha", "achha", "bahut", "mera", "meri", "karna", "kar", "rahe", "rahi", "raha", "ho", "kahan", "chahiye", "batao"}),
+        "ur": len(words & {"hain", "hoon", "aap", "ap", "kya", "kaise", "kaisay", "mujhe", "tum", "aapko", "acha", "bohat", "nahi", "nahin", "batao", "suno", "shukriya"})
+    }
+    if scores["pa"] >= 2 and scores["pa"] >= max(scores["hi"], scores["ur"]):
+        return "pa"
+    if scores["hi"] > scores["ur"]:
+        return "hi"
+    if scores["ur"] > 0:
+        return "ur"
+    if re.search(r"\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they)\b", t):
+        return "en"
+    return "ur"
+
+REPLIES = {
+"en": {
+"hello":"Hey! How's it going? What's up?",
+"how":"I'm doing well! How are you?",
+"thanks":"You're welcome! Happy to help.",
+"identity":"I'm Alexa, your friendly assistant. What can I help you with?",
+"bored":"Let's make this interesting. Want a joke, a fun fact, or just a chat?",
+"sad":"Sorry things feel rough. Want to tell me what's going on?",
+"happy":"That's great news! What happened?",
+"joke":"Why did the computer go to the doctor? It caught a virus. 😄",
+"bye":"See you later! Take care.",
+"yes":"Alright! Tell me a little more.",
+"no":"No worries. What would you rather talk about?",
+"doing":"Just here chatting with you. What are you up to?",
+"where":"I am right here in this chat. What is up?",
+"whatsup":"Not much, just chatting with you. How about you?",
+"unknown":"I can chat and help with simple offline tasks, but I don't have a full language model installed. Tell me a bit more and I'll do my best."
+},
+"ur": {
+"hello":"Assalam o alaikum! Kya haal hain? Aaj kya scene hai?",
+"how":"Main theek hoon! Aap sunao, sab kaisa chal raha hai?",
+"thanks":"Koi baat nahi! Khushi hui help karke.",
+"identity":"Main Alexa hoon, aapki friendly assistant. Batao, kis cheez mein help chahiye?",
+"bored":"Chalo kuch interesting baat karte hain! Joke sunna hai ya koi mazedar fact?",
+"sad":"Oh, sun kar afsos hua. Agar batana chaho to kya hua? Main sun rahi hoon.",
+"happy":"Wah, yeh to achi baat hai! Kya khushkhabri hai?",
+"joke":"Teacher: Homework kahan hai? Student: Sir, cloud mein save kiya tha, badal aa gaye! 😄",
+"bye":"Allah hafiz! Phir baat hoti hai. Apna khayal rakhna!",
+"yes":"Achha ji! Thora aur batao, phir main behtar samajh sakungi.",
+"no":"Theek hai, koi masla nahi. Phir kis bare mein baat karein?",
+"doing":"Bas yahin tumse baat kar rahi hoon. Tum sunao?",
+"where":"Yahin chat mein hoon. Batao, kya scene hai?",
+"whatsup":"Bas tumse baat ho rahi hai. Tum sunao, kya haal hai?",
+"unknown":"Main aapki baat samajhne ki koshish kar rahi hoon. Thora aur context de do; mere paas abhi full generative model nahi hai."
+},
+"hi": {
+"hello":"Arey hello! Kaise ho? Aaj kya chal raha hai?",
+"how":"Main badhiya hoon! Tum batao, sab kaisa chal raha hai?",
+"thanks":"Koi baat nahi! Help karke achha laga.",
+"identity":"Main Alexa hoon, tumhari friendly assistant. Batao, kya help chahiye?",
+"bored":"Chalo kuch mazedaar karte hain! Joke sunoge ya koi interesting fact?",
+"sad":"Ye sunkar bura laga. Agar batana chaho to kya hua? Main sun rahi hoon.",
+"happy":"Arey wah, ye to bahut achhi baat hai! Kya good news hai?",
+"joke":"Teacher: Homework kahan hai? Student: Sir, Google Drive mein tha, internet chala gaya! 😄",
+"bye":"Phir milte hain! Apna khayal rakhna.",
+"yes":"Achha! Thoda aur batao, main samajhne ki koshish karti hoon.",
+"no":"Koi baat nahi. Phir kis baare mein baat karein?",
+"doing":"Bas tumse baat kar rahi hoon. Tum kya kar rahe ho?",
+"where":"Yahin chat mein hoon. Tum kahan ho?",
+"whatsup":"Bas yahin hoon! Tum batao, kya chal raha hai?",
+"unknown":"Main tumhari baat samajhne ki koshish kar rahi hoon. Thoda aur context do; mere paas abhi full generative model nahi hai."
+},
+"pa": {
+"hello":"Oye hoye! Ki haal aa? Sab changa?",
+"how":"Main vadiya haan ji! Tussi sunao, ki haal chaal ne?",
+"thanks":"Koi gall nahi veere! Help karke changa laggeya.",
+"identity":"Main Alexa haan ji! Dassyo, tuhadi ki help karaan?",
+"bored":"Oye bore kyun ho rahe o? Koi joke sunna ya gallan maariye?",
+"sad":"Aah, eh sun ke changa nahi laggeya. Je dil kare taan dasso ki hoya, main sun rahi haan.",
+"happy":"O balle balle! Eh taan vadiya khabar aa. Ki hoya ji?",
+"joke":"Master ji: Homework kithe aa? Student: Sir, cloud te si, ajj badal chhaye hoye ne! 😄",
+"bye":"Changa fer! Apna khayal rakhyo, fer gall karde aan.",
+"yes":"Haanji, dasso fer! Hor thoda samjhao.",
+"no":"Chalo koi gall nahi ji. Hor ki gall kariye?",
+"doing":"Bas tuhade naal gallan kar rahi haan ji. Tussi dasso?",
+"where":"Ethe chat vich hi haan ji. Tussi kithe o?",
+"whatsup":"Bas gallan-baatan chal rahi aan. Tussi sunao, ki haal aa?",
+"unknown":"Main tuhadi gall samajhan di koshish kar rahi haan. Thoda hor context deyo; mere kol hale full generative model nahi."
+}
+}
 
 def safe_math(expression):
-    """Evaluate only numeric arithmetic; never execute arbitrary Python."""
     expression = expression.replace("×", "*").replace("÷", "/").replace("^", "**")
     if not re.fullmatch(r"[0-9\s.+\-*/()%]*", expression):
         return None
     try:
         node = ast.parse(expression, mode="eval")
         def calc(n):
-            if isinstance(n, ast.Expression):
-                return calc(n.body)
-            if isinstance(n, ast.Constant) and type(n.value) in (int, float):
-                return n.value
+            if isinstance(n, ast.Expression): return calc(n.body)
+            if isinstance(n, ast.Constant) and type(n.value) in (int, float): return n.value
             if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)):
-                v = calc(n.operand)
-                return v if isinstance(n.op, ast.UAdd) else -v
+                v = calc(n.operand); return v if isinstance(n.op, ast.UAdd) else -v
             if isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)):
                 a, b = calc(n.left), calc(n.right)
-                if isinstance(n.op, ast.Add): result = a + b
-                elif isinstance(n.op, ast.Sub): result = a - b
-                elif isinstance(n.op, ast.Mult): result = a * b
-                elif isinstance(n.op, ast.Div): result = a / b
-                elif isinstance(n.op, ast.FloorDiv): result = a // b
-                elif isinstance(n.op, ast.Mod): result = a % b
+                if isinstance(n.op, ast.Add): v = a+b
+                elif isinstance(n.op, ast.Sub): v = a-b
+                elif isinstance(n.op, ast.Mult): v = a*b
+                elif isinstance(n.op, ast.Div): v = a/b
+                elif isinstance(n.op, ast.FloorDiv): v = a//b
+                elif isinstance(n.op, ast.Mod): v = a%b
                 else:
                     if abs(b) > 8: raise ValueError()
-                    result = a ** b
-                if abs(result) > 10**15: raise ValueError()
-                return result
+                    v = a**b
+                if abs(v) > 10**15: raise ValueError()
+                return v
             raise ValueError()
         result = calc(node)
-        if not math.isfinite(float(result)):
-            return None
+        if not math.isfinite(float(result)): return None
         return int(result) if int(result) == result else round(result, 6)
     except (SyntaxError, ValueError, TypeError, ZeroDivisionError, OverflowError):
         return None
 
-def answer(message, history=None):
+def memory_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=8)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("CREATE TABLE IF NOT EXISTS turns (conversation TEXT NOT NULL, seq INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_seq ON turns(conversation, seq)")
+    return conn
+
+def get_history(conversation, supplied):
+    if not conversation:
+        return [x for x in supplied if isinstance(x, dict)][-MAX_HISTORY:]
+    with DB_LOCK:
+        with memory_connection() as conn:
+            rows = conn.execute("SELECT role, content FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?", (conversation, MAX_HISTORY)).fetchall()
+    return [{"role": r, "content": c} for r, c in reversed(rows)]
+
+def save_turns(conversation, user_text, reply):
+    if not conversation:
+        return
+    with DB_LOCK:
+        with memory_connection() as conn:
+            conn.execute("INSERT INTO turns(conversation, role, content, created_at) VALUES(?,?,?,?)", (conversation, "user", user_text[:4000], dt.datetime.now(dt.timezone.utc).isoformat()))
+            conn.execute("INSERT INTO turns(conversation, role, content, created_at) VALUES(?,?,?,?)", (conversation, "assistant", reply[:4000], dt.datetime.now(dt.timezone.utc).isoformat()))
+            conn.execute("DELETE FROM turns WHERE conversation=? AND seq NOT IN (SELECT seq FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?)", (conversation, conversation, MAX_HISTORY))
+
+def response_for(message, history):
     raw = str(message or "").strip()
+    lang = detect_language(raw)
     t = normalize(raw)
+    r = REPLIES[lang]
     if not t:
-        return "Haan, main yahin hoon. Kya baat hai?"
-
-    # Basic arithmetic is useful offline and has no model dependency.
-    math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|btao)\s+", "", t)
-    if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*(×|÷|\^)\s*\d", raw):
-        result = safe_math(math_text if math_text != t else raw)
-        if result is not None:
-            return "Iska jawab " + str(result) + " hai."
-
-    if has_any(t, ("good morning", "subha bakhair", "subah bakhair")):
-        return "Good morning! Aaj ka din kaisa ja raha hai?"
-    if has_any(t, ("good afternoon", "dopahar")):
-        return "Good afternoon! Sab theek chal raha hai?"
-    if has_any(t, ("good evening", "sham bakhair", "shaam bakhair")):
-        return "Good evening! Aaj kya haal hai?"
-    if has_any(t, ("good night", "goodnight", "shab bakhair")):
-        return "Good night! Apna khayal rakhna."
-    if has_any(t, ("assalam o alaikum", "assalamu alaikum", "salam", "asalamualaikum", "السلام علیکم")):
-        return "Wa alaikum assalam! Kya haal hain?"
-    if re.fullmatch(r"(hi|hii+|hello|helloo+|hey|heyy+|yo|aoa|salam|salaam)[!. ]*", t):
-        return "Hey! Kya haal hai? Aaj kya scene hai?"
-    if has_any(t, ("how are you", "how r u", "kaise ho", "kaisay ho", "kesi ho", "kese ho", "kya haal")):
-        return "Main theek hoon! Tum sunao, sab kaisa chal raha hai?"
-    if has_any(t, ("thank you", "thanks", "shukriya", "bohat shukriya", "thx")):
-        return "Koi baat nahi! Khushi hui help karke."
-    if has_any(t, ("who are you", "tum kon ho", "tum kaun ho", "ap kon", "your name", "naam kya")):
-        return "Main Alexa hoon — group ki friendly assistant. Batao, kis cheez mein help chahiye?"
-    if has_any(t, ("what can you do", "kya kar sakti", "kya kar sakte", "help me", "madad chahiye")):
-        return "Main basic chat, greetings aur simple calculations mein help kar sakti hoon. Mushkil ya latest sawalon ke liye mujhe online AI ki zaroorat hoti hai."
-    if has_any(t, ("i am bored", "bore ho raha", "bore ho rahi", "boring")):
-        return "Chalo kuch interesting baat karte hain! Tumhein jokes pasand hain ya random interesting facts?"
-    if has_any(t, ("tell me a joke", "joke sunao", "koi joke", "make me laugh")):
-        return "Teacher: Homework kahan hai? Student: Sir, Google Drive mein save kiya tha… internet nahi tha! 😄"
-    if has_any(t, ("i am sad", "feeling sad", "udaas", "pareshan hoon", "tension hai", "mood off")):
-        return "Oh, sun kar afsos hua. Agar batana chaho to kya hua? Main sun sakti hoon."
-    if has_any(t, ("i am happy", "bohat khush", "so happy", "great news", "khushi")):
-        return "Yeh to achi baat hai! 😄 Kya khushkhabri hai?"
-    if has_any(t, ("i love you", "love u")):
-        return "Aww, that's kind of you! Main Alexa hoon, aur help ke liye yahin hoon. 💛"
-    if has_any(t, ("are you real", "kya tum real", "are you ai", "tum ai ho")):
-        return "Main Alexa software assistant hoon. Yeh lightweight offline mode hai, is liye har topic ka jawab nahi de sakti."
-    if has_any(t, ("time kya", "what time", "current time", "waqt kya")):
-        return "Server ka local time " + dt.datetime.now().astimezone().strftime("%I:%M %p") + " hai."
-    if has_any(t, ("today date", "aaj date", "date kya", "what date", "aaj ki tareekh")):
-        return "Aaj ki tareekh " + dt.datetime.now().astimezone().strftime("%d %B %Y") + " hai."
-    if has_any(t, ("bye", "goodbye", "allah hafiz", "khuda hafiz", "see you")):
-        return "Allah hafiz! Phir baat hoti hai. Take care!"
-    if has_any(t, ("sorry", "maaf karna", "my bad")):
-        return "Koi baat nahi, sab theek hai."
-    if has_any(t, ("yes", "haan", "han", "yup", "yeah")):
-        # Use the last assistant turn only for a tiny amount of conversational continuity.
-        if history:
-            previous = " ".join(normalize(x.get("content", "")) for x in history[-4:] if isinstance(x, dict))
-            if has_any(previous, ("jokes", "joke")):
-                return "Theek hai, ek aur suno: Computer thak gaya… kyun ke uske bohat saare tabs khule thay! 😄"
-        return "Achha! Batao, aur kya chal raha hai?"
-    if has_any(t, ("no", "nahi", "nahin", "nope")) and len(t.split()) <= 3:
-        return "Theek hai, koi masla nahi. Kuch aur baat karni hai?"
-    # None means this local engine has no reliable answer. The API marks it as
-    # a normal fallback condition so Alexa can immediately try Gemini/Groq.
-    return None
+        return r["hello"]
+    if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم", "سلام", "नमस्ते", "नमस्कार", "हैलो")):
+        return r["hello"]
+    if any(mark in raw for mark in ("آپ کیسے ہیں", "آپ کیسے ہو", "آپ کا حال")):
+        return r["how"]
+    math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\s+", "", t)
+    if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
+        value = safe_math(math_text if math_text != t else raw)
+        if value is not None:
+            if lang == "en": return "The answer is " + str(value) + "."
+            if lang == "hi": return "Iska jawab " + str(value) + " hai."
+            if lang == "pa": return "Isda jawab " + str(value) + " aa."
+            return "Iska jawab " + str(value) + " hai."
+    if re.search(r"\b(good morning|subah|subha|morning)\b", t):
+        return "Good morning! Aaj ka din kaisa ja raha hai?" if lang != "en" else "Good morning! How's your day going?"
+    if re.search(r"\b(hello|hi|hii+|hey|heyy+|salam|salaam|assalam|aslam|namaste|namaskar|hailo|aoa|sat sri akal|satsriakal|ki haal)\b", t):
+        return r["hello"]
+    if re.search(r"\b(how are you|how r u|kaise ho|kaise hain|kaisay ho|kese ho|kese hain|kya haal|ki haal|kida|kidda|ap kise hin|aap kaise hain)\b", t):
+        return r["how"]
+    if re.search(r"\b(what are you doing|what r u doing|kya kar rahe|kya kar rahi|ki kar rahe|ki kar rahi|ki karna|ki kardi|ki karde|tussi ki karde|tussi ki kar rahe)\b", t):
+        return r["doing"]
+    if re.search(r"\b(where are you|where r u|kahan ho|kidhar ho|tussi kithe|kithe o)\b", t):
+        return r["where"]
+    if re.search(r"\b(what is up|whats up|what's up|kya chal raha|ki haal chaal|ki haal aa)\b", t):
+        return r["whatsup"]
+    if re.search(r"\b(thank you|thanks|shukriya|bohat shukriya|meharbani|dhanvaad|dhanyavaad)\b", t):
+        return r["thanks"]
+    if re.search(r"\b(who are you|tum kon ho|tum kaun ho|aap kon|your name|naam kya|tu kaun)\b", t):
+        return r["identity"]
+    if re.search(r"\b(bored|boring|bore ho|pak gaya|pak gayi|vehla|vela)\b", t):
+        return r["bored"]
+    if re.search(r"\b(sad|udaas|pareshan|tension|mood off|dukhi|dil udaas)\b", t):
+        return r["sad"]
+    if re.search(r"\b(happy|khush|khushi|great news|vadiya khabar|changa hoya)\b", t):
+        return r["happy"]
+    if re.search(r"\b(joke|jokes|mazaak|mazak|chutkula|latifa|hasao|laugh)\b", t):
+        return r["joke"]
+    if re.search(r"\b(bye|goodbye|allah hafiz|khuda hafiz|see you|fer milange|chal bye)\b", t):
+        return r["bye"]
+    if re.fullmatch(r"(yes|yeah|yup|haan|han|ji|achha|acha|theek|ok|okay|bilkul|haaji)[!. ]*", t):
+        prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
+        if "joke" in prior or "mazak" in prior:
+            return r["joke"]
+        return r["yes"]
+    if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
+        return r["no"]
+    if re.search(r"\b(time kya|what time|current time|waqt kya|samay kya|kinna time)\b", t):
+        now = dt.datetime.now().astimezone().strftime("%I:%M %p")
+        return ("It is " if lang == "en" else "Hun time " if lang == "pa" else "Abhi time ") + now + "."
+    if re.search(r"\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", t):
+        today = dt.datetime.now().astimezone().strftime("%d %B %Y")
+        return ("Today's date is " if lang == "en" else "Ajj di tareekh " if lang == "pa" else "Aaj ki tareekh ") + today + "."
+    # Contextual follow-up: acknowledge a topic from the recent conversation.
+    if history:
+        last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
+        if last_user and any(w in t.split() for w in ("why", "kyun", "kaise", "how", "phir", "then", "aur")):
+            if lang == "en": return "You're asking about what we were just discussing. Which part should I explain first?"
+            if lang == "hi": return "Tum pichhli baat ke baare mein pooch rahe ho na? Kaunsa hissa samjhaun?"
+            if lang == "pa": return "Tussi pichhli gall baare puchh rahe o? Kehda hissa samjhaavaan?"
+            return "Aap pichhli baat ke bare mein pooch rahe hain? Kaunsa hissa samjhaun?"
+    return r["unknown"]
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
@@ -140,16 +303,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def authorized(self):
-        if not API_TOKEN:
-            return True
-        return hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + API_TOKEN)
+        return not API_TOKEN or hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + API_TOKEN)
 
     def do_GET(self):
         if self.path == "/health":
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro",
-                "engine": "local-intent-utility", "is_llm": False, "memory_mode": "stateless"})
-        return self.send_json(200, {"service": "alexa-own-ai-micro",
-            "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_5"})
+        return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
         if not self.authorized():
@@ -158,8 +317,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(404, {"error": "not_found"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if size < 0 or size > MAX_BODY:
-                return self.send_json(413, {"error": "request_too_large"})
+            if size <= 0 or size > MAX_BODY:
+                return self.send_json(413 if size > MAX_BODY else 400, {"error": "request_too_large" if size > MAX_BODY else "empty_body"})
             body = json.loads(self.rfile.read(size) or b"{}")
             if not isinstance(body, dict):
                 raise ValueError()
@@ -168,28 +327,29 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/chat":
             message = str(body.get("message", ""))
-            history = body.get("history", [])
-            if not isinstance(history, list):
-                history = []
-            reply = answer(message, history[-MAX_HISTORY:])
-            return self.send_json(200, {"reply": reply or "", "fallback": reply is None,
-                "provider": "alexa-own-ai-micro", "is_llm": False})
+            supplied = body.get("history", [])
+            if not isinstance(supplied, list): supplied = []
+            conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
+            history = get_history(conversation, supplied)
+            reply = response_for(message, history)
+            save_turns(conversation, message, reply)
+            return self.send_json(200, {"reply": reply, "fallback": False, "provider": "alexa-own-ai-micro", "is_llm": False, "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
 
         messages = body.get("messages", [])
-        if not isinstance(messages, list):
-            messages = []
+        if not isinstance(messages, list): messages = []
         message = ""
         for item in reversed(messages):
             if isinstance(item, dict) and item.get("role") == "user":
                 content = item.get("content", "")
                 message = content if isinstance(content, str) else ""
                 break
-        history = [x for x in messages[-MAX_HISTORY:] if isinstance(x, dict)]
-        reply = answer(message, history)
+        conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
+        history = get_history(conversation, messages)
+        reply = response_for(message, history)
+        save_turns(conversation, message, reply)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro", "object": "chat.completion",
-            "choices": [{"index": 0, "message": {"role": "assistant",
-                "content": reply or ""}, "finish_reason": "stop" if reply is not None else "fallback"}]
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}]
         })
 
     def log_message(self, fmt, *args):
