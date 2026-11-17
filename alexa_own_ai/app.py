@@ -15,11 +15,16 @@ import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+try:
+    from .conversation_brain import respond as conversation_respond
+except ImportError:  # support running app.py from the service root
+    from conversation_brain import respond as conversation_respond
+
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
-MAX_HISTORY = 5
+MAX_HISTORY = 20
 DB_LOCK = threading.RLock()
 
 # Approximate transliteration for common Urdu and Hindi chat vocabulary.
@@ -82,7 +87,7 @@ def detect_language(raw):
     t = normalize(raw)
     # Only two reply modes: English, or Roman Hindi/Urdu.
     # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
-    if re.search(r"\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|me|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
+    if re.search(r"\b(the|is|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
         return "en"
     return "ur"
 
@@ -227,6 +232,11 @@ def response_for(message, history):
     if not t:
         return r["hello"]
 
+    # Dedicated dialogue layer handles everyday conversation and contextual follow-ups.
+    brain_reply = conversation_respond(raw, t, lang, history)
+    if brain_reply:
+        return brain_reply
+
     # Natural Roman Hindi/Urdu small talk and conversational repair.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
@@ -366,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_5"})
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
         return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
