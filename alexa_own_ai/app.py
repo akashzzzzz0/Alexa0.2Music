@@ -247,8 +247,8 @@ def response_for(message, history):
     # sentences and emoji-only messages before the model could interpret them.
     # Keep arithmetic local for deterministic, exact results.
     math_candidate = bool(
-        re.search(r"\\d\\s*[+*/%\\-]\\s*\\d", t)
-        or re.search(r"\\d\\s*[×÷^]\\s*\\d", raw)
+        re.search(r"\d\s*[+*/%\-]\s*\d", t)
+        or re.search(r"\d\s*[×÷^]\s*\d", raw)
     )
     if raw and not math_candidate:
         model_reply = local_model_generate(raw, history)
