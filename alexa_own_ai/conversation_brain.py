@@ -100,8 +100,8 @@ def respond(message, normalized, language, history, context=None):
     # Ranking questions need evidence from the conversation or caller context.
     # Never guess that Alexa (or any member) is No. 1 when no ranking data exists.
     ranking_question = bool(re.search(
-        r"\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b.{0,32}\\b(?:kon|kaun|who|hai|is)\\b|"
-        r"\\b(?:who|kon|kaun)\\b.{0,32}\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b",
+        r"\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b.{0,32}\b(?:kon|kaun|who|hai|is)\b|"
+        r"\b(?:who|kon|kaun)\b.{0,32}\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b",
         str(message or "").casefold(),
     ))
     if ranking_question:
@@ -110,8 +110,8 @@ def respond(message, normalized, language, history, context=None):
             if isinstance(item, dict)
         ) + " " + str(context or "")
         has_ranking_evidence = bool(re.search(
-            r"\\b(leaderboard|ranking|rank|position|top\\s*player|score|points|kills|coins|level)\\b|"
-            r"(?:\\bno\\.?\\s*1\\b|\\bnumber\\s*1\\b|\\b#\\s*1\\b)",
+            r"\b(leaderboard|ranking|rank|position|top\s*player|score|points|kills|coins|level)\b|"
+            r"(?:\bno\.?\s*(?:1|one)\b|\bnumber\s*(?:1|one)\b|\b#\s*1\b)",
             evidence.casefold(),
         ))
         if not has_ranking_evidence:
