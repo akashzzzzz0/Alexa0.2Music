@@ -314,7 +314,7 @@ def response_for(message, history):
         if lang == "pa":
             return "Oye, dasso ji! Ki gall karni aa?"
         return "Haan bolo, kya baat hai?"
-    if re.search(r"\\b(axha|acha|achha|accha)\\b", t) and re.search(r"\\b(kya du|kia du|kya doon|kia doon|kya btaun|kya bataun|kya bolun)\\b", t):
+    if re.search(r"\b(axha|acha|achha|accha)\b", t) and re.search(r"\b(kya du|kia du|kya doon|kia doon|kya btaun|kya bataun|kya bolun)\b", t):
         if lang == "en":
             return "Just tell me what's on your mind. I'm listening."
         if lang == "pa":
