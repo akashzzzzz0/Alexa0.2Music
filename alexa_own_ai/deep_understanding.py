@@ -76,6 +76,16 @@ def analyze(message, history):
     )
 
     correction = bool(re.search(_CORRECTION, text))
+    owner_assertion = bool(re.search(
+        r"\\b(?:tera|tumhara|tumhari|aapka|apki)\\s+owner\\s+(?:to\\s+)?"
+        r"(?:mai|main|me)\\s+(?:hi\\s+)?(?:hu|hun|hoon|hon|na|naa)\\b|"
+        r"\\b(?:mai|main|me)\\s+(?:hi\\s+)?(?:tera|tumhara|tumhari|"
+        r"aapka|apki)\\s+owner\\s+(?:hu|hun|hoon|hon)\\b|"
+        r"\\bowner\\s+(?:to\\s+)?(?:mai|main|me)\\s+(?:hi\\s+)?"
+        r"(?:hu|hun|hoon|hon|na|naa)\\b",
+        text,
+    ))
+    correction = correction or owner_assertion
     question = "?" in raw or "؟" in raw or bool(re.search(_QUESTION, text))
     request = bool(re.search(_REQUEST, text))
     greeting = bool(re.fullmatch(
@@ -106,7 +116,9 @@ def analyze(message, history):
 
     # A short answer to Alexa's last question is more useful as a continuation
     # than as a fresh, isolated question/request classification.
-    if correction:
+    if owner_assertion:
+        act = "owner_relationship_assertion"
+    elif correction:
         act = "correction_or_disagreement"
     elif greeting:
         act = "greeting"
@@ -142,6 +154,7 @@ def analyze(message, history):
         tones.append("neutral_or_unclear")
 
     strategies = {
+        "owner_relationship_assertion": "accept_the_explicit_owner_statement_as_conversation_context_and_acknowledge_it_without_claiming_it_authenticates_privileged_permissions",
         "correction_or_disagreement": "acknowledge_correction_first_then_replace_the_wrong_interpretation",
         "question": "answer_the_actual_question_first_and_cover_each_requested_part",
         "request": "identify_the_requested_outcome_and_do_it_without_answering_only_a_surface_keyword",
@@ -163,6 +176,7 @@ def analyze(message, history):
         "short_message=" + ("yes" if short else "no"),
         "contains_negation=" + ("yes" if negation else "no"),
         "contains_possible_correction=" + ("yes" if correction else "no"),
+        "explicit_owner_relationship_statement=" + ("yes" if owner_assertion else "no"),
         "contains_request=" + ("yes" if request else "no"),
         "contains_question=" + ("yes" if question else "no"),
         "tone_cues=" + (",".join(tones) if tones else "none_detected"),
