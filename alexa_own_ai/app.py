@@ -228,7 +228,7 @@ def response_for(message, history):
         return r["hello"]
 
     # Natural Roman Hindi/Urdu small talk and conversational repair.
-    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha thi|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
+    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
     if re.search(r"\\b(kis|kaun se|kon se)\\b", t) and re.search(r"\\b(alfaz|lafz|ilfaz|words|tarah)\\b", t) and re.search(r"\\b(samj|samajh|samjhe|samjha)\\w*\\b", t):
         prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
