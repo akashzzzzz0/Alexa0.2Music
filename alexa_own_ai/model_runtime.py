@@ -70,7 +70,17 @@ def _messages(message, history):
         "Answer the actual question directly; do not ask for rephrasing when "
         "the meaning is reasonably clear. Never fabricate facts, memories, "
         "relationships, or real-world experiences. Do not claim to have human "
-        "feelings, and do not reveal hidden reasoning."
+        "feelings, and do not reveal hidden reasoning. Do not announce that you are an AI, "
+        "explain that you are Alexa, or describe your design unless the user directly "
+        "asks who/what you are. Never begin a normal reply with filler such as "
+        "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
+        "introduce time information unless the user explicitly asks for the current time. "
+        "Your persona is feminine: in Roman Urdu/Hindi use feminine first-person forms "
+        "such as 'kar rahi hoon', 'samajh sakti hoon', and 'de deti hoon'; never use "
+        "masculine self-reference such as 'kar raha hoon' or 'de deta hoon'. Avoid "
+        "calling the user 'bhai' unless they themselves use that form of address. "
+        "For a simple call like 'oye suno' or 'baat sun', answer naturally and briefly, "
+        "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
     messages = [{"role": "system", "content": system_prompt}]
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
@@ -213,12 +223,45 @@ def _local_generate(message, history):
         return None
 
 
+def _is_unprompted_meta_reply(message, answer):
+    """Reject conspicuously off-topic identity/time filler from a generative model."""
+    user = str(message or "").strip().lower()
+    reply = str(answer or "").strip().lower()
+    asks_identity = any(term in user for term in (
+        "who are you", "what are you", "tum kon ho", "tum kaun ho",
+        "aap kon ho", "aap kaun ho", "tumhara naam", "your name",
+        "kaun ho", "kon ho",
+    ))
+    asks_time = any(term in user for term in (
+        "what time", "current time", "time kya", "abhi time", "waqt kya",
+        "samay kya", "kinna time",
+    ))
+    identity_disclosure = any(term in reply for term in (
+        "i am an ai", "i'm an ai", "as an ai", "main ai hoon",
+        "main aik ai", "technically, main alexa", "technically, i am alexa",
+        "designed to help you",
+    ))
+    unsolicited_time = any(term in reply for term in (
+        "exact time", "time de deta", "time de deti", "time bata deta",
+        "time bata deti", "current time is",
+    ))
+    dismissive_filler = reply.startswith(("okay, chill", "ok, chill", "technically,"))
+    return (identity_disclosure and not asks_identity) or (unsolicited_time and not asks_time) or dismissive_filler
+
+
 def generate(message, history):
     """Try Cloudflare Workers AI, then an optional self-hosted OpenAI-compatible model."""
     if not str(message or "").strip():
         return None
     messages = _messages(message, history)
     answer = _cloudflare_generate(messages)
-    if answer:
+    if answer and not _is_unprompted_meta_reply(message, answer):
         return answer
-    return _local_generate(message, history)
+    if answer:
+        print("Discarding off-topic Alexa identity/time filler from Cloudflare response.", flush=True)
+    answer = _local_generate(message, history)
+    if answer and not _is_unprompted_meta_reply(message, answer):
+        return answer
+    if answer:
+        print("Discarding off-topic Alexa identity/time filler from local model response.", flush=True)
+    return None
