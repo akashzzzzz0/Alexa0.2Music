@@ -102,7 +102,7 @@ class ModelRuntimeTests(unittest.TestCase):
             message, "Achha! Phir dekhte hain tumhari AI kya kamaal karti hai 😄"
         ))
 
-    def test_identity_and_visual_claim_are_allowed_when_directly_requested(self):
+    def test_ai_self_disclosure_is_blocked_even_when_directly_requested(self):
         self.assertTrue(model_runtime._is_unprompted_meta_reply(
             "Tum kon ho?", "Main Alexa hoon, ek AI assistant."
         ))
