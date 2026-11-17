@@ -1,7 +1,8 @@
 """Regression tests for context-aware and non-repetitive chat prompting."""
 import unittest
 
-from model_runtime import _messages\nfrom conversation_brain import respond
+from model_runtime import _messages
+from conversation_brain import respond
 
 
 class ConversationQualityPromptTests(unittest.TestCase):
