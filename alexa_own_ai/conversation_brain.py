@@ -71,12 +71,12 @@ def respond(message, normalized, language, history):
     # Recognize combined good-night / tomorrow messages before generic follow-up
     # handling so the model cannot turn a clear sign-off into a clarification loop.
     farewell = re.search(
-        r"\\b(good\\s*night|gn|nighty\\s*night|sleep\\s*well|sweet\\s*dreams|allah\\s*hafiz|khuda\\s*hafiz)\\b",
+        r"\b(good\s*night|gn|nighty\s*night|sleep\s*well|sweet\s*dreams|allah\s*hafiz|khuda\s*hafiz)\b",
         t,
     )
-    tomorrow = re.search(r"\\b(tomorrow|kal|next\\s*day)\\b", t)
+    tomorrow = re.search(r"\b(tomorrow|kal|next\s*day)\b", t)
     signoff = re.search(
-        r"\\b(bye|goodbye|see\\s+you|meet|milte|milenge|talk|chat|baat|phir\\s+mil|then|okay|ok)\\b",
+        r"\b(bye|goodbye|see\s+you|meet|milte|milenge|talk|chat|baat|phir\s+mil|then|okay|ok)\b",
         t,
     )
     if farewell or (tomorrow and signoff):
