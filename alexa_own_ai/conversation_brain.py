@@ -97,7 +97,7 @@ def respond(message, normalized, language, history):
 
     # Repair a short correction after Alexa has already asked the user to rephrase.
     # Do not repeat the same clarification; acknowledge and continue naturally.
-    if re.search(r"\\b(nhi|nahi|nahin|no)\\b", t) and re.search(r"\\b(ese|aise|aisay|is tarah|normal|samj|samajh)\\w*\\b", t):
+    if re.search(r"\b(nhi|nahi|nahin|no)\b", t) and re.search(r"\b(ese|aise|aisay|is tarah|normal|samj|samajh)\w*\b", t):
         if any(k in prev for k in ("rephrase", "doosre", "context", "samajh", "listening", "words")):
             return "Haan, ab samajh gayi. Tum normal baat karo, main follow kar rahi hoon."
     # Handle common shortened Roman Urdu spelling and incomplete greetings.
