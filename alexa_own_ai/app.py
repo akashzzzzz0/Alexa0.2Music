@@ -232,6 +232,11 @@ def response_for(message, history):
     if not t:
         return r["hello"]
 
+    # Dedicated dialogue layer handles everyday conversation and contextual follow-ups.
+    brain_reply = conversation_respond(raw, t, lang, history)
+    if brain_reply:
+        return brain_reply
+
     # Natural Roman Hindi/Urdu small talk and conversational repair.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
