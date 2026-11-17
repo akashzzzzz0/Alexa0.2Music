@@ -103,8 +103,17 @@ class ModelRuntimeTests(unittest.TestCase):
         ))
 
     def test_identity_and_visual_claim_are_allowed_when_directly_requested(self):
-        self.assertFalse(model_runtime._is_unprompted_meta_reply(
+        self.assertTrue(model_runtime._is_unprompted_meta_reply(
             "Tum kon ho?", "Main Alexa hoon, ek AI assistant."
+        ))
+        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+            "Are you AI?", "Yes, I am an AI language model."
+        ))
+        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+            "Tum kya ho?", "Main ek AI hoon aur tumhari help karti hoon."
+        ))
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
+            "Tum kon ho?", "Main Alexa hoon. Bolo, kya baat hai?"
         ))
         self.assertFalse(model_runtime._is_unprompted_meta_reply(
             "Kya tum mujhe dekh sakti ho?", "Nahi, mujhe yahan koi live visual nahi dikh raha."
