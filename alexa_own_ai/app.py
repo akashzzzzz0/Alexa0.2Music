@@ -373,6 +373,13 @@ def response_for(message, history):
     if history:
         last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
         previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
+    # Give unresolved contextual messages one bounded model attempt before
+    # the generic local fallback. Deterministic intents above stay local, while
+    # short follow-ups and open chat can use the supplied conversation history.
+    model_reply = local_model_generate(raw, history)
+    if model_reply:
+        return model_reply
+
     # Do not let a generic short-follow-up rule swallow real questions.
     # The model must see the recent dialogue so it can resolve "why?", "meaning?",
     # references, and incomplete Roman Urdu messages from their actual context.
