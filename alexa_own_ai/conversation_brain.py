@@ -65,6 +65,14 @@ def respond(message, normalized, language, history):
     prev = last_assistant.lower()
     words = set(t.split())
 
+    # Short, natural Roman Urdu small-talk and playful teasing.
+    if re.fullmatch(r"(baby|babu|oye|suno|hello|hi)[!. ]*", t):
+        return "Ji, bolo 😊" if roman else "Hey, go ahead."
+    if re.search(r"\\b(baat karni hai|baat krni hai|mujhe baat karni|talk karni hai|want to talk)\\b", t):
+        return "Haan ji, bolo. Kya baat hai?" if roman else "Sure, what's up?"
+    if re.search(r"\\b(tum pagal ho|tu pagal hai|pagal ho tum|you are crazy|you're crazy)\\b", t):
+        return "Achha ji? Maine kya kar diya? 😄" if roman else "Oh really? What did I do? 😄"
+
     # Preserve the exact real-world conversation that exposed the repeated fallback.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return ("Yes, all good here. I was right here—how are you?" if not roman
