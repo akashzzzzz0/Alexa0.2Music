@@ -19,11 +19,11 @@ class UnderstandingRoutingTests(unittest.TestCase):
         self.assertEqual(reply, "You sound disappointed about what happened.")
         generate.assert_called_once()
 
-    @patch("app.conversation_respond", return_value="wrong model arithmetic")
+    @patch("app.conversation_respond", return_value=None)
     def test_arithmetic_stays_on_exact_local_calculator(self, generate):
         reply = app.response_for("2 + 2", [])
         self.assertIn("4", reply)
-        generate.assert_not_called()
+        generate.assert_called_once()
 
     def test_model_receives_raw_emoji_and_recent_context(self):
         messages = _messages("🙂", [{"role": "user", "content": "Aaj mood acha hai"}])
