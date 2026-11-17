@@ -244,16 +244,16 @@ def response_for(message, history):
     if not t:
         return r["hello"]
 
-    # Prefer the operator-owned generative model when one is configured.
-    # The lightweight dialogue engine remains the offline fallback.
-    model_reply = local_model_generate(raw, history)
-    if model_reply:
-        return model_reply
-
-    # Dedicated dialogue layer handles everyday conversation and contextual follow-ups.
+    # Resolve clear everyday intents locally first. A configured model must not
+    # override an obvious greeting/how-are-you message with a generic clarification.
     brain_reply = conversation_respond(raw, t, lang, history)
     if brain_reply:
         return brain_reply
+
+    # Use the generative model for open-ended messages the dialogue layer cannot classify.
+    model_reply = local_model_generate(raw, history)
+    if model_reply:
+        return model_reply
 
     # Natural Roman Hindi/Urdu small talk and conversational repair.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
