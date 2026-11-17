@@ -1,8 +1,8 @@
 """Lightweight, privacy-safe conversation analysis for Alexa Own AI.
 
-This layer does not guess hidden emotions or replace the language model. It
-extracts cautious conversational cues from the current turn and recent turns
-so the model can resolve references and choose a more useful reply.
+This layer extracts cautious multilingual cues from the complete current turn
+and recent turns. It guides the language model; it never replaces it or claims
+to know hidden emotions with certainty.
 """
 import re
 
@@ -17,6 +17,27 @@ _EMOJI_GROUPS = (
     (("🤔", "❓", "⁉️"), "thinking_or_questioning"),
 )
 
+_CORRECTION = (
+    r"\b(no|nahi|nahin|nhi|galat|wrong|mera matlab|mera kehna|"
+    r"matlab ye|matlab yeh|maine kaha|i meant|i mean|that's not|"
+    r"that is not|not what i meant|you misunderstood|samjho)\b"
+)
+_QUESTION = (
+    r"\b(what|why|when|where|who|which|how|kya|kyun|kiun|kaise|kaisa|"
+    r"kab|kahan|kidhar|kon|kaun|matlab|mtlb|kis tarah|kitna|kitni)\b"
+)
+_REQUEST = (
+    r"\b(please|plz|can you|could you|would you|help me|batao|btao|"
+    r"samjhao|samjha do|samjha|karo|kro|kar do|kardo|kr do|"
+    r"bana do|bna do|fix karo|fix kro|theek karo|thik karo|"
+    r"likh do|likh do|explain|tell me|show me|chahiye|zaroorat hai)\b"
+)
+_REFERENCE = (
+    r"\b(it|that|this|same|ye|yeh|wo|woh|wahi|wohi|us|usne|iska|"
+    r"uska|unki|unhon|phir|fir|kyun|kiun|kaise|matlab|mtlb|"
+    r"aur|or|haan|han|acha|achha|iske|uske)\b"
+)
+
 def _last(history, role):
     for item in reversed(history or []):
         if isinstance(item, dict) and item.get("role") == role:
@@ -25,58 +46,66 @@ def _last(history, role):
                 return value.strip()
     return ""
 
+
 def _emoji_cues(message):
-    cues = []
-    for symbols, label in _EMOJI_GROUPS:
-        if any(symbol in message for symbol in symbols):
-            cues.append(label)
-    return cues
+    return [
+        label for symbols, label in _EMOJI_GROUPS
+        if any(symbol in message for symbol in symbols)
+    ]
+
+
+def _script_hint(message):
+    if any("\u0600" <= char <= "\u06ff" for char in message):
+        return "urdu_or_arabic_script"
+    if any("\u0900" <= char <= "\u097f" for char in message):
+        return "devanagari_script"
+    return "latin_or_mixed_script"
+
 
 def analyze(message, history):
-    """Return a compact structured cue summary; never infer certainty."""
+    """Return compact, uncertainty-aware cues for whole-message interpretation."""
     raw = str(message or "").strip()
     text = raw.casefold()
-    words = re.findall(r"[a-zA-Z0-9']+", text)
+    # Unicode-aware tokenization keeps Urdu/Devanagari words in the length
+    # estimate instead of treating a full-script message as an empty string.
+    words = re.findall(r"\w+", text, flags=re.UNICODE)
     previous_assistant = _last(history, "assistant")
     previous_user = _last(history, "user")
     previous_assistant_asked = bool(
         previous_assistant and re.search(r"[?؟]\s*$", previous_assistant)
     )
 
-    correction = bool(re.search(
-        r"\b(no|nahi|nahin|nhi|galat|wrong|mera matlab|matlab ye|i meant|"
-        r"that's not|that is not|you misunderstood|samjho)\b", text
-    ))
-    question = "?" in raw or "؟" in raw or bool(re.search(
-        r"\b(what|why|when|where|who|which|how|kya|kyun|kaise|kaisa|kab|kahan|"
-        r"kon|kaun|matlab|mtlb)\b", text
-    ))
-    request = bool(re.search(
-        r"\b(please|plz|can you|could you|help me|batao|btao|samjhao|karo|"
-        r"kar do|likh do|explain|tell me|show me)\b", text
-    ))
+    correction = bool(re.search(_CORRECTION, text))
+    question = "?" in raw or "؟" in raw or bool(re.search(_QUESTION, text))
+    request = bool(re.search(_REQUEST, text))
     greeting = bool(re.fullmatch(
         r"[\W_]*(hi|hello|hey|salam|assalam o alaikum|suno|oye)[\W_]*", text
     ))
-    gratitude = bool(re.search(r"\b(thanks|thank you|shukriya|meharbani)\b", text))
-    apology = bool(re.search(r"\b(sorry|maaf|my bad|meri galti)\b", text))
+    gratitude = bool(re.search(r"\b(thanks|thank you|shukriya|meharbani|dhanvaad)\b", text))
+    apology = bool(re.search(r"\b(sorry|maaf|my bad|meri galti|meri ghalti)\b", text))
     frustration = bool(re.search(
         r"\b(annoyed|angry|frustrated|bakwas|kya yaar|samajh nahi|"
-        r"nahi samajhte|not listening|useless|wtf)\b", text
+        r"samajh nhi|nahi samajhte|not listening|not understanding|"
+        r"useless|wtf|pareshan kar diya)\b", text
     ))
-    playful = bool(re.search(r"\b(lol|lmao|haha|hehe|mazak|mazaak)\b", text))
+    playful = bool(re.search(
+        r"\b(lol|lmao|haha|hehe|mazak|mazaak|majak|mazaq)\b", text
+    ))
     emotional = bool(re.search(
         r"\b(sad|udaas|pareshan|worried|tension|happy|khush|excited|"
-        r"hurt|dukhi|pareshani)\b", text
+        r"hurt|dukhi|pareshani|ghussa|gussa|naraz|naraaz)\b", text
+    ))
+    negation = bool(re.search(
+        r"\b(no|not|never|don't|doesn't|didn't|nahi|nahin|nhi|mat|"
+        r"bilkul nahi|aisa nahi|aise nahi)\b", text
     ))
     short = len(words) <= 4
-    followup = short and bool(previous_assistant)
-    refers_back = bool(re.search(
-        r"\b(it|that|this|same|ye|woh|us|iska|uska|kyun|kaise|matlab|mtlb|"
-        r"phir|aur|haan|han|acha|achha|ok|okay)\b", text
-    ))
+    refers_back = bool(re.search(_REFERENCE, text))
+    followup = bool(previous_assistant and (short or refers_back))
     emoji_cues = _emoji_cues(raw)
 
+    # A short answer to Alexa's last question is more useful as a continuation
+    # than as a fresh, isolated question/request classification.
     if correction:
         act = "correction_or_disagreement"
     elif greeting:
@@ -85,16 +114,16 @@ def analyze(message, history):
         act = "gratitude"
     elif apology:
         act = "apology"
-    elif question:
-        act = "question"
+    elif short and previous_assistant_asked and not question and not request:
+        act = "answer_to_previous_question"
     elif request:
         act = "request"
+    elif question:
+        act = "question"
     elif emotional:
         act = "emotional_share"
     elif playful:
         act = "playful_message"
-    elif short and previous_assistant_asked:
-        act = "answer_to_previous_question"
     elif followup and refers_back:
         act = "contextual_followup"
     else:
@@ -103,35 +132,48 @@ def analyze(message, history):
     tones = []
     if frustration:
         tones.append("possibly_frustrated")
-    if playful or any(x == "amused_or_laughing" for x in emoji_cues):
+    if playful or "amused_or_laughing" in emoji_cues:
         tones.append("possibly_playful")
     if emotional:
         tones.append("emotion_word_present")
+    if negation:
+        tones.append("negation_present_check_what_it_modifies")
     if not tones and not emoji_cues:
         tones.append("neutral_or_unclear")
 
     strategies = {
-        "correction_or_disagreement": "acknowledge_correction_first_then_fix_the_misunderstanding",
-        "question": "answer_the_specific_question_first_then_add_only_useful_context",
-        "request": "identify_the_requested_outcome_and_complete_it_directly",
-        "answer_to_previous_question": "connect_this_short_answer_to_the_previous_assistant_question",
-        "contextual_followup": "resolve_references_from_recent_turns_before_answering",
-        "emotional_share": "acknowledge_the_emotion_without_assuming_unstated_causes",
+        "correction_or_disagreement": "acknowledge_the_specific_correction_then_replace_the_wrong_interpretation",
+        "question": "answer_the_actual_question_first_and_cover_each_requested_part",
+        "request": "identify_the_requested_outcome_and_do_it_without_answering_only_a_surface_keyword",
+        "answer_to_previous_question": "connect_this_answer_to_the_assistant_question_and_continue_that_thread",
+        "contextual_followup": "resolve_pronouns_and_omitted_subjects_from_the_closest_relevant_turns",
+        "emotional_share": "acknowledge_the_expressed_feeling_without_inventing_its_cause",
         "gratitude": "respond_warmly_without_reopening_a_finished_topic",
         "apology": "accept_or_reassure_briefly_without_overdoing_it",
-        "playful_message": "match_the_light_tone_only_if_context_supports_it",
+        "playful_message": "match_the_light_tone_only_if_the_words_and_context_support_it",
         "greeting": "greet_naturally_and_invite_the_actual_topic",
-        "statement_or_open_chat": "respond_to_the_meaningful_point_and_add_one_relevant_next_step",
+        "statement_or_open_chat": "respond_to_the_main_point_and_preserve_any_explicit_constraints",
     }
+
     lines = [
-        "Conversation analysis (heuristic cues, not certainties):",
+        "Whole-message conversation analysis (cautious cues, not a definitive meaning):",
         "message_act=" + act,
-        "tone_cues=" + ",".join(tones),
-        "emoji_cues=" + (",".join(emoji_cues) if emoji_cues else "none_detected"),
+        "script_hint=" + _script_hint(raw),
+        "word_count=" + str(len(words)),
         "short_message=" + ("yes" if short else "no"),
+        "contains_negation=" + ("yes" if negation else "no"),
+        "contains_possible_correction=" + ("yes" if correction else "no"),
+        "contains_request=" + ("yes" if request else "no"),
+        "contains_question=" + ("yes" if question else "no"),
+        "tone_cues=" + (",".join(tones) if tones else "none_detected"),
+        "emoji_cues=" + (",".join(emoji_cues) if emoji_cues else "none_detected"),
         "likely_contextual_reference=" + ("yes" if refers_back else "no"),
         "previous_assistant_asked_question=" + ("yes" if previous_assistant_asked else "no"),
+        "previous_user_turn_available=" + ("yes" if previous_user else "no"),
         "reply_strategy=" + strategies[act],
-        "Use the full conversation to verify these cues. If a cue conflicts with the actual words or context, trust the conversation. Never state this analysis to the user.",
+        "Interpret every clause in the complete message, including conditions, negation, and constraints. "
+        "Do not let one detected keyword override the sentence meaning. Use the recent conversation "
+        "to resolve omitted subjects and references; if evidence conflicts, trust the actual words. "
+        "These cues are hints only: never state them to the user or present uncertain tone as fact.",
     ]
     return "\n".join(lines)
