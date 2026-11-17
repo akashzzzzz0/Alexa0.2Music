@@ -101,18 +101,18 @@ def respond(message, normalized, language, history, context=None):
     # Alexa's owner. This is dialogue context only, never authentication for
     # privileged actions or account access.
     owner_assertion = re.search(
-        r"\\b(?:tera|tumhara|tumhari|aapka|apki)\\s+owner\\s+(?:to\\s+)?"
-        r"(?:mai|main|me)\\s+(?:hi\\s+)?(?:hu|hun|hoon|hon|na|naa)\\b|"
-        r"\\b(?:mai|main|me)\\s+(?:hi\\s+)?(?:tera|tumhara|tumhari|"
-        r"aapka|apki)\\s+owner\\s+(?:hu|hun|hoon|hon)\\b|"
-        r"\\bowner\\s+(?:to\\s+)?(?:mai|main|me)\\s+(?:hi\\s+)?"
-        r"(?:hu|hun|hoon|hon|na|naa)\\b",
+        r"\b(?:tera|tumhara|tumhari|aapka|apki)\s+owner\s+(?:to\s+)?"
+        r"(?:mai|main|me)\s+(?:hi\s+)?(?:hu|hun|hoon|hon|na|naa)\b|"
+        r"\b(?:mai|main|me)\s+(?:hi\s+)?(?:tera|tumhara|tumhari|"
+        r"aapka|apki)\s+owner\s+(?:hu|hun|hoon|hon)\b|"
+        r"\bowner\s+(?:to\s+)?(?:mai|main|me)\s+(?:hi\s+)?"
+        r"(?:hu|hun|hoon|hon|na|naa)\b",
         t,
     )
     if owner_assertion:
         denied_owner = bool(re.search(
-            r"\\b(owner\\s+toh?\\s+main\\s+nahi|main\\s+owner\\s+nahi|"
-            r"owner\\s+main\\s+nahi)\\b", prev
+            r"\b(owner\s+toh?\s+main\s+nahi|main\s+owner\s+nahi|"
+            r"owner\s+main\s+nahi)\b", prev
         ))
         if roman:
             return ("Haan, tum mere owner ho—pehle maine galat jawab diya tha. Sorry 😊"
