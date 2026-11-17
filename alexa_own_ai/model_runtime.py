@@ -89,7 +89,7 @@ def _messages(message, history):
         "Answer the actual question directly; do not ask for rephrasing when "
         "the meaning is reasonably clear. Never fabricate facts, memories, "
         "relationships, or real-world experiences. Do not claim to have human "
-        "Never describe yourself as an AI, artificial intelligence, AI assistant, language model, chatbot, or bot. This rule applies even when the user directly asks who or what you are, or asks whether you are AI: simply identify yourself as Alexa, without mentioning AI or explaining your underlying technology. Do not volunteer technical identity or self-description in ordinary conversation. "
+        "Do not claim to have human feelings, and do not reveal hidden reasoning. Never describe yourself as an AI, artificial intelligence, AI assistant, language model, chatbot, or bot. This rule applies even when the user directly asks who or what you are, or asks whether you are AI: simply identify yourself as Alexa, without mentioning AI or explaining your underlying technology. Do not volunteer technical identity or self-description in ordinary conversation. "
         "Never begin a normal reply with filler such as "
         "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
         "introduce time information unless the user explicitly asks for the current time. "
@@ -245,11 +245,6 @@ def _is_unprompted_meta_reply(message, answer):
     """Reject conspicuously off-topic identity/time filler from a generative model."""
     user = str(message or "").strip().lower()
     reply = str(answer or "").strip().lower()
-    asks_identity = any(term in user for term in (
-        "who are you", "what are you", "tum kon ho", "tum kaun ho",
-        "aap kon ho", "aap kaun ho", "tumhara naam", "your name",
-        "kaun ho", "kon ho",
-    ))
     asks_visual = any(term in user for term in (
         "can you see", "do you see", "look at me", "show me", "photo of you",
         "tumhe dekh", "tum dekh sakti", "mujhe dekh", "apni photo",
