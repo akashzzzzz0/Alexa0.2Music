@@ -107,6 +107,7 @@ def _cloudflare_generate(messages):
         with urllib.request.urlopen(request, timeout=_timeout()) as response:
             result = json.loads(response.read(1_000_000).decode("utf-8"))
         if not isinstance(result, dict) or result.get("success") is False:
+            print("Cloudflare Workers AI returned an unsuccessful response:", json.dumps(result, ensure_ascii=False)[:3000], flush=True)
             return None
         data = result.get("result", result)
         answer = data.get("response") if isinstance(data, dict) else None
@@ -115,8 +116,19 @@ def _cloudflare_generate(messages):
             if choices and isinstance(choices[0], dict):
                 answer = choices[0].get("message", {}).get("content")
         answer = answer.strip() if isinstance(answer, str) else ""
-        return answer[:8000] if answer else None
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
+        if not answer:
+            print("Cloudflare Workers AI response had no recognized text. Result keys:", list(data.keys()) if isinstance(data, dict) else type(data).__name__, flush=True)
+            return None
+        return answer[:8000]
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read(4000).decode("utf-8", "replace")
+        except Exception:
+            detail = str(exc)
+        print("Cloudflare Workers AI HTTP error:", exc.code, detail, flush=True)
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError) as exc:
+        print("Cloudflare Workers AI request failed:", type(exc).__name__, str(exc)[:1000], flush=True)
         return None
 
 
