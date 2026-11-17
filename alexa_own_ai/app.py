@@ -87,7 +87,7 @@ def detect_language(raw):
     t = normalize(raw)
     # Only two reply modes: English, or Roman Hindi/Urdu.
     # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
-    if re.search(r"\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
+    if re.search(r"\b(the|is|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
         return "en"
     return "ur"
 
