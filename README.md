@@ -1,11 +1,13 @@
 # Alexa Own AI
 
-This repository now contains the lightweight Alexa Own AI service.
+This repository contains the standalone Alexa Own AI service used by the
+Alexa project. The service lives in `alexa_own_ai/` and is deployed separately
+from the Telegram bot.
 
 ## Deploy on EthioDeploy
 
 - Repository: `akashzzzzz0/Alexa0.2Music`
-- Branch: `main`
+- Branch: `main` (or the approved release branch)
 - Root Directory: `alexa_own_ai`
 - Builder: Dockerfile
 - Dockerfile Path: `Dockerfile`
@@ -17,11 +19,19 @@ This repository now contains the lightweight Alexa Own AI service.
 
 - `GET /health` — service health
 - `GET /` — service information
-- `POST /chat` — lightweight chat endpoint
+- `POST /chat` — conversational chat endpoint
 - `POST /v1/chat/completions` — OpenAI-compatible request shape
 
-See [alexa_own_ai/README.md](alexa_own_ai/README.md) for request examples and configuration.
+The service supports multilingual conversation, recent SQLite conversation
+history, structured understanding cues, optional hosted/self-hosted model
+inference, and optional caller-supplied context. See
+[`alexa_own_ai/README.md`](alexa_own_ai/README.md) for configuration, request
+examples, memory limits, and media/context integration requirements.
 
-## Important limitation
+## Important integration boundary
 
-The current engine is a small offline intent and utility responder, **not a trained large language model**. It can handle only its supported patterns. For open-ended conversation, connect an online model provider in the calling Alexa bot.
+The service cannot read Telegram group state, leaderboard rows, or media files
+on its own. The calling application must pass current facts through the
+optional `context`, `memory_context`, or `media_context` request fields.
+Actual image/audio interpretation also requires a compatible model payload or
+a trusted transcript/description from the caller.

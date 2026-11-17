@@ -8,8 +8,10 @@ import time
 
 try:
     from . import deep_understanding
+    from .context_envelope import format_context
 except ImportError:  # Support the service's legacy direct-module launch path.
     import deep_understanding
+    from context_envelope import format_context
 
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
@@ -50,7 +52,7 @@ def status():
     }
 
 
-def _messages(message, history):
+def _messages(message, history, context=None):
     system_prompt = (
         "You are Alexa, a friendly, natural conversational assistant. Read the "
         "entire recent conversation before answering; understand the user's "
@@ -102,7 +104,7 @@ def _messages(message, history):
         "relationships, or real-world experiences. Do not claim to have human "
         "Do not claim to have human feelings, and do not reveal hidden reasoning. "
         "Do not volunteer technical identity or describe yourself as AI in ordinary "
-        "conversation. If the user directly asks whether you are AI or what you are, "
+        "conversation. Do not announce that you are an AI unless the user directly asks. If the user directly asks whether you are AI or what you are, "
         "answer truthfully and briefly without turning it into an unnecessary lecture. "
         "Never begin a normal reply with filler such as "
         "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
@@ -115,6 +117,9 @@ def _messages(message, history):
         "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
     system_prompt += "\n\n" + deep_understanding.analyze(message, history)
+    reference_context = format_context(context)
+    if reference_context:
+        system_prompt += "\n\n" + reference_context
     messages = [{"role": "system", "content": system_prompt}]
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
         if not isinstance(item, dict):
@@ -220,7 +225,7 @@ def _cloudflare_generate(messages, timeout=None):
         return None
 
 
-def _local_generate(message, history, timeout=None):
+def _local_generate(message, history, timeout=None, context=None):
     endpoint = _endpoint(os.getenv("ALEXA_LOCAL_MODEL_URL", ""))
     if not endpoint:
         return None
@@ -228,7 +233,7 @@ def _local_generate(message, history, timeout=None):
     token = os.getenv("ALEXA_LOCAL_MODEL_TOKEN", "")
     payload = json.dumps({
         "model": model_name,
-        "messages": _messages(message, history),
+        "messages": _messages(message, history, context=context),
         "temperature": 0.7,
         "max_tokens": 192,
     }).encode("utf-8")
@@ -316,13 +321,13 @@ def _is_unprompted_meta_reply(message, answer):
             or dismissive_filler)
 
 
-def generate(message, history):
+def generate(message, history, context=None):
     """Try Cloudflare Workers AI, then an optional self-hosted OpenAI-compatible model."""
     if not str(message or "").strip():
         return None
     started = time.monotonic()
     deadline = started + MAX_TOTAL_INFERENCE_SECONDS
-    messages = _messages(message, history)
+    messages = _messages(message, history, context=context)
     answer = _cloudflare_generate(messages, timeout=min(_timeout(), max(1.0, deadline - time.monotonic())))
     if answer and not _is_unprompted_meta_reply(message, answer) and not _is_repeated_reply(history, answer):
         print("Alexa inference completed via Cloudflare in {:.2f}s.".format(time.monotonic() - started), flush=True)
@@ -335,7 +340,7 @@ def generate(message, history):
     # do not let two sequential provider timeouts make a Telegram reply feel stuck.
     remaining = deadline - time.monotonic()
     if remaining >= 1.0 and os.getenv("ALEXA_LOCAL_MODEL_URL", "").strip():
-        answer = _local_generate(message, history, timeout=min(_timeout(), remaining))
+        answer = _local_generate(message, history, timeout=min(_timeout(), remaining), context=context)
         if answer and not _is_unprompted_meta_reply(message, answer) and not _is_repeated_reply(history, answer):
             print("Alexa inference completed via self-hosted model in {:.2f}s.".format(time.monotonic() - started), flush=True)
             return answer

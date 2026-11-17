@@ -58,7 +58,7 @@ def _history_text(history):
     return last_user, last_assistant
 
 
-def respond(message, normalized, language, history):
+def respond(message, normalized, language, history, context=None):
     """Return a confident local reply, or None for generative model routing."""
     t = normalized
     roman = language != "en"
