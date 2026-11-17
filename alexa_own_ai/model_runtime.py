@@ -8,8 +8,8 @@ import time
 
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
-MAX_CONTEXT_MESSAGES = 10
-MAX_MESSAGE_CHARS = 900
+MAX_CONTEXT_MESSAGES = 14
+MAX_MESSAGE_CHARS = 1400
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
@@ -51,7 +51,13 @@ def _messages(message, history):
         "entire recent conversation before answering; understand the user's "
         "actual intent, tone, teasing, sarcasm, typos, speech-to-text errors, "
         "incomplete sentences, and follow-up references instead of reacting to "
-        "isolated keywords. Treat emoji and emoji combinations as meaningful "
+        "isolated keywords. Read the turns chronologically and give extra weight "
+        "to the latest relevant exchange; resolve short replies against the "
+        "question or point immediately before them. Distinguish a correction "
+        "from a new request, and do not treat a quoted or mentioned phrase as "
+        "the user's own intent. If two interpretations remain equally plausible, "
+        "ask one short, specific clarification rather than guessing. "
+        "Treat emoji and emoji combinations as meaningful "
         "communication: infer their likely tone from the words and recent context, "
         "including emoji-only messages, but do not pretend an ambiguous emoji has "
         "one certain meaning. If the message contains a sticker, image, or voice "
@@ -89,7 +95,10 @@ def _messages(message, history):
         "Answer the actual question directly; do not ask for rephrasing when "
         "the meaning is reasonably clear. Never fabricate facts, memories, "
         "relationships, or real-world experiences. Do not claim to have human "
-        "Do not claim to have human feelings, and do not reveal hidden reasoning. Never describe yourself as an AI, artificial intelligence, AI assistant, language model, chatbot, or bot. This rule applies even when the user directly asks who or what you are, or asks whether you are AI: simply identify yourself as Alexa, without mentioning AI or explaining your underlying technology. Do not volunteer technical identity or self-description in ordinary conversation. "
+        "Do not claim to have human feelings, and do not reveal hidden reasoning. "
+        "Do not volunteer technical identity or describe yourself as AI in ordinary "
+        "conversation. If the user directly asks whether you are AI or what you are, "
+        "answer truthfully and briefly without turning it into an unnecessary lecture. "
         "Never begin a normal reply with filler such as "
         "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
         "introduce time information unless the user explicitly asks for the current time. "
@@ -136,7 +145,7 @@ def _cloudflare_generate(messages, timeout=None):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 144,
+        "max_completion_tokens": 192,
         "temperature": 0.7,
         "reasoning_effort": None,
         "chat_template_kwargs": {
@@ -215,7 +224,7 @@ def _local_generate(message, history, timeout=None):
         "model": model_name,
         "messages": _messages(message, history),
         "temperature": 0.7,
-        "max_tokens": 144,
+        "max_tokens": 192,
     }).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
@@ -253,6 +262,11 @@ def _is_unprompted_meta_reply(message, answer):
         "what time", "current time", "time kya", "abhi time", "waqt kya",
         "samay kya", "kinna time",
     ))
+    asks_identity = any(term in user for term in (
+        "who are you", "what are you", "are you ai", "are you an ai",
+        "tum kon ho", "tum kaun ho", "tum kya ho", "kya tum ai",
+        "aap kon ho", "aap kaun ho", "your identity",
+    ))
     identity_disclosure = any(term in reply for term in (
         "i am an ai", "i'm an ai", "im an ai", "as an ai",
         "i am ai", "i'm ai", "i am an artificial intelligence",
@@ -274,7 +288,7 @@ def _is_unprompted_meta_reply(message, answer):
         "you can see me", "mujhe dekh sakti ho",
     ))
     dismissive_filler = reply.startswith(("okay, chill", "ok, chill", "technically,"))
-    return (identity_disclosure
+    return ((identity_disclosure and not asks_identity)
             or (unsolicited_time and not asks_time)
             or (unsolicited_visual_claim and not asks_visual)
             or dismissive_filler)
