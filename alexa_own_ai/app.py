@@ -361,23 +361,16 @@ def response_for(message, history):
     if history:
         last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
         previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
-        if last_user and any(w in words for w in ("why", "kyun", "kaise", "how", "phir", "then", "aur")):
-            if lang == "en": return "You're asking about what we were just discussing. Which part should I explain first?"
-            if lang == "hi": return "Tum pichhli baat ke baare mein pooch rahe ho na? Kaunsa hissa samjhaun?"
-            if lang == "pa": return "Tussi pichhli gall baare puchh rahe o? Kehda hissa samjhaavaan?"
-            return "Aap pichhli baat ke bare mein pooch rahe hain? Kaunsa hissa samjhaun?"
-        if previous_assistant and any(x in previous_assistant for x in ("context", "samajh", "listening")):
-            if lang == "en": return "No pressure—say it in your own words. I'm following."
-            if lang == "pa": return "Koi gall nahi, apne lafzan vich dasso. Main samajhan di koshish kar rahi aan."
-            return "Koi masla nahi, apne alfaaz mein batao. Main samajhne ki koshish kar rahi hoon."
-    # Vary unknown-message prompts so unrelated messages don't receive a repeated canned line.
-    if lang == "en":
-        return "I want to get what you mean. Can you say that another way?"
-    # Only genuinely open-ended messages reach the remote model, after all
-    # local intent and conversational-repair rules have had a chance to answer.
+    # Do not let a generic short-follow-up rule swallow real questions.
+    # The model must see the recent dialogue so it can resolve "why?", "meaning?",
+    # references, and incomplete Roman Urdu messages from their actual context.
     model_reply = local_model_generate(raw, history)
     if model_reply:
         return model_reply
+    # Only use a clarification fallback when no generative model is configured
+    # or the provider is temporarily unavailable.
+    if lang == "en":
+        return "I'm not fully sure what you mean yet. Can you give me one small hint?"
     if lang == "en":
         return "I'm listening. Tell me a little more about what you mean."
     if lang == "pa":

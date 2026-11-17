@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from alexa_own_ai import app
 
@@ -63,6 +64,29 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
     def test_unknown_reply_is_not_the_old_repeated_fallback(self):
         reply = app.response_for("Aaj kuch ajeeb hua", [])
         self.assertNotIn("thora aur context", reply.lower())
+
+    def test_contextual_followups_are_sent_to_model_instead_of_generic_fallback(self):
+        history = [
+            {"role": "user", "content": "Oyee baat sun"},
+            {"role": "assistant", "content": "Haan bolo, kya baat hai?"},
+            {"role": "user", "content": "Bohat buri baat hai"},
+            {"role": "assistant", "content": "Kya hua? Izzat lagna shuru ho gayi?"},
+        ]
+        with mock.patch.object(app, "local_model_generate", return_value="Kya hua? Kis baat par keh rahe ho?") as model:
+            reply = app.response_for("Mtlb?", history)
+        self.assertEqual(reply, "Kya hua? Kis baat par keh rahe ho?")
+        model.assert_called_once()
+        self.assertEqual(model.call_args.args[0], "Mtlb?")
+        self.assertEqual(model.call_args.args[1], history)
+
+    def test_freeform_message_after_generic_assistant_prompt_reaches_model(self):
+        history = [
+            {"role": "assistant", "content": "Koi masla nahi, apne alfaaz mein batao. Main samajhne ki koshish kar rahi hoon."}
+        ]
+        with unittest.mock.patch.object(app, "local_model_generate", return_value="Haan, bolo. Main sun rahi hoon.") as model:
+            reply = app.response_for("Oyee baat sun", history)
+        self.assertEqual(reply, "Haan, bolo. Main sun rahi hoon.")
+        model.assert_called_once()
 
     def test_unknown_message_gets_a_nonempty_clarification(self):
         for message in ("Aaj kuch ajeeb hua", "Tell me something unusual", "Mujhe samajh nahi aa raha"):
