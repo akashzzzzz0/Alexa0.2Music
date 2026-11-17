@@ -241,11 +241,24 @@ def response_for(message, history):
     lang = detect_language(raw)
     t = normalize(raw)
     r = REPLIES[lang]
+
+    # Give the configured language model first chance to understand the complete
+    # message in context. The old ordering let keyword rules intercept ordinary
+    # sentences and emoji-only messages before the model could interpret them.
+    # Keep arithmetic local for deterministic, exact results.
+    math_candidate = bool(
+        re.search(r"\d\s*[+*/%\-]\s*\d", t)
+        or re.search(r"\d\s*[×÷^]\s*\d", raw)
+    )
+    if raw and not math_candidate:
+        model_reply = local_model_generate(raw, history)
+        if model_reply:
+            return model_reply
+
+    # If no model is configured/available, retain the local fallback behavior.
     if not t:
         return r["hello"]
 
-    # Resolve clear everyday intents locally first. A configured model must not
-    # override an obvious greeting/how-are-you message with a generic clarification.
     brain_reply = conversation_respond(raw, t, lang, history)
     if brain_reply:
         return brain_reply
@@ -364,9 +377,7 @@ def response_for(message, history):
     # Do not let a generic short-follow-up rule swallow real questions.
     # The model must see the recent dialogue so it can resolve "why?", "meaning?",
     # references, and incomplete Roman Urdu messages from their actual context.
-    model_reply = local_model_generate(raw, history)
-    if model_reply:
-        return model_reply
+    # The model was already tried before deterministic fallback rules above.
     # Only use a clarification fallback when no generative model is configured
     # or the provider is temporarily unavailable.
     if lang == "en":
