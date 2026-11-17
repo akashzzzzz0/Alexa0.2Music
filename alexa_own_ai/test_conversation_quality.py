@@ -8,6 +8,27 @@ from deep_understanding import analyze
 
 class ConversationQualityPromptTests(unittest.TestCase):
 
+    def test_reciprocal_good_night_wish_gets_acknowledged_not_repeated(self):
+        history = [
+            {"role": "assistant", "content": "Good night, have a peaceful sleep. 😁"}
+        ]
+        reply = respond("Same to you Alexa", "same to you alexa", "en", history)
+        self.assertEqual(reply, "Aww, thank you! 😊")
+        self.assertNotIn("good night", reply.lower())
+        self.assertNotIn("sleep well", reply.lower())
+
+    def test_reciprocal_wish_requires_a_prior_wish(self):
+        self.assertIsNone(respond("Same to you Alexa", "same to you alexa", "en", []))
+
+    def test_roman_urdu_reciprocal_wish_is_acknowledged(self):
+        history = [
+            {"role": "assistant", "content": "Good night! Aaram se sona. Kal phir baat karenge."}
+        ]
+        self.assertEqual(
+            respond("Tumhein bhi Alexa", "tumhein bhi alexa", "ur", history),
+            "Aww, shukriya! 😊",
+        )
+
     def test_location_question_gets_direct_relevant_answer(self):
         cases = [
             ("Tum kis desh se ho?", "tum kis desh se ho", "ur"),
