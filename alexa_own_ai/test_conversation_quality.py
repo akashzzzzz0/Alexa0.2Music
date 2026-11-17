@@ -30,6 +30,11 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("pronoun", system)
         self.assertIn("recent turns", system)
 
+    def test_multi_part_message_bypasses_single_phrase_canned_reply(self):
+        message = "Tum kya kar rahi ho aur aaj ka plan kya hai?"
+        reply = respond(message, message.lower(), "ur", [])
+        self.assertIsNone(reply)
+
     def test_prompt_discourages_repeated_stock_replies(self):
         system = _messages("Acha", [
             {"role": "assistant", "content": "Haan, batao kya hua?"}
