@@ -15,7 +15,7 @@ def route_response(message, normalized, language, history, context=None):
     Return None for local app.py handlers (math, date/time, and other exact
     intents) when no conversational-brain match or model reply is available.
     """
-    local_reply = _conversation_respond(message, normalized, language, history)
+    local_reply = _conversation_respond(message, normalized, language, history, context=context)
     if local_reply:
         return local_reply
 
