@@ -6,7 +6,10 @@ import urllib.parse
 import urllib.request
 import time
 
-from alexa_own_ai import deep_understanding
+try:
+    from . import deep_understanding
+except ImportError:  # Support the service's legacy direct-module launch path.
+    import deep_understanding
 
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
