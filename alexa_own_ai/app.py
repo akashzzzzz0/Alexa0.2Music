@@ -1,9 +1,9 @@
-"""Alexa Own AI: low-memory multilingual conversational engine.
+"""Alexa Own AI: low-memory multilingual conversational HTTP service.
 
-This is an offline intent/context engine, not a trained generative LLM.
-It uses only the Python standard library and keeps the latest five turns
-per conversation in SQLite. It never calls third-party AI providers.
+The service combines deterministic local intents, contextual dialogue rules,
+SQLite conversation history, and optional hosted/self-hosted LLM inference.
 """
+
 import ast
 import datetime as dt
 import hmac
