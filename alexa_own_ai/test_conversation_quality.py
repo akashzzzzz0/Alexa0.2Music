@@ -8,40 +8,9 @@ from deep_understanding import analyze
 
 class ConversationQualityPromptTests(unittest.TestCase):
 
-    def test_reciprocal_good_night_wish_gets_acknowledged_not_repeated(self):
-        history = [
-            {"role": "assistant", "content": "Good night, have a peaceful sleep. 😁"}
-        ]
-        reply = respond("Same to you Alexa", "same to you alexa", "en", history)
-        self.assertEqual(reply, "Aww, thank you! 😊")
-        self.assertNotIn("good night", reply.lower())
-        self.assertNotIn("sleep well", reply.lower())
 
-    def test_reciprocal_wish_requires_a_prior_wish(self):
-        self.assertIsNone(respond("Same to you Alexa", "same to you alexa", "en", []))
 
-    def test_roman_urdu_reciprocal_wish_is_acknowledged(self):
-        history = [
-            {"role": "assistant", "content": "Good night! Aaram se sona. Kal phir baat karenge."}
-        ]
-        self.assertEqual(
-            respond("Tumhein bhi Alexa", "tumhein bhi alexa", "ur", history),
-            "Aww, shukriya! 😊",
-        )
 
-    def test_location_question_gets_direct_relevant_answer(self):
-        cases = [
-            ("Tum kis desh se ho?", "tum kis desh se ho", "ur"),
-            ("Which country are you from?", "which country are you from", "en"),
-            ("Tum kahan rehti ho?", "tum kahan rehti ho", "ur"),
-        ]
-        for raw, normalized, language in cases:
-            with self.subTest(raw=raw):
-                answer = respond(raw, normalized, language, [])
-                self.assertIsNotNone(answer)
-                self.assertIn("virtual assistant", answer.lower())
-                self.assertNotIn("kitne log", answer.lower())
-                self.assertNotIn("how many people", answer.lower())
 
     def test_prompt_requires_intent_and_reference_resolution(self):
         system = _messages("Woh kyun bola?", [
@@ -52,26 +21,7 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("pronoun", system)
         self.assertIn("recent turns", system)
 
-    def test_explicit_owner_correction_is_acknowledged_without_topic_switch(self):
-        history = [
-            {"role": "assistant", "content": "Lol, owner toh main nahi hoon."}
-        ]
-        message = "Abe tera owner to mai hu naa"
-        reply = respond(message, message.lower(), "ur", history)
-        self.assertIn("tum mere owner ho", reply.lower())
-        self.assertIn("galat jawab", reply.lower())
-        self.assertNotIn("kya plan", reply.lower())
 
-    def test_owner_assertion_variants_are_understood(self):
-        for message in (
-            "Tumhara owner main hoon",
-            "Owner to mai hi hu",
-            "Main tumhara owner hun",
-        ):
-            with self.subTest(message=message):
-                reply = respond(message, message.lower(), "ur", [])
-                self.assertIsNotNone(reply)
-                self.assertIn("owner ho", reply.lower())
 
     def test_owner_prompt_keeps_relationship_context_but_not_permissions(self):
         system = _messages("Abe tera owner to mai hu naa", [])[0]["content"].lower()
@@ -131,6 +81,39 @@ class ConversationQualityPromptTests(unittest.TestCase):
         system = _messages("No 1 kon hai?", [])[0]["content"].lower()
         self.assertIn("leaderboard", system)
         self.assertIn("never claim that you yourself are no. 1", system)
+
+    def test_normal_chat_is_routed_to_model_not_canned_local_dialogue(self):
+        cases = [
+            ("Same to you Alexa", "same to you alexa", "en"),
+            ("Haan", "haan", "ur"),
+            ("Tum kya kar rahi ho?", "tum kya kar rahi ho", "ur"),
+            ("Arre haan, samajh gaya. Uski leadership strong hai.", "arre haan samajh gaya uski leadership strong hai", "ur"),
+            ("🙄😂", "🙄😂", "ur"),
+        ]
+        for raw, normalized, language in cases:
+            with self.subTest(raw=raw):
+                self.assertIsNone(respond(raw, normalized, language, []))
+
+    def test_model_prompt_requires_fresh_non_stock_replies(self):
+        system = _messages("Same to you", [
+            {"role": "assistant", "content": "Good night, sleep well."}
+        ])[0]["content"].lower()
+        self.assertIn("do not use canned dialogue", system)
+        self.assertIn("fresh, natural response", system)
+        self.assertIn("do not reply merely because a message arrived", system)
+
+    def test_deep_understanding_detects_contextual_praise_and_agreement(self):
+        cues = analyze(
+            "Haan, uski strong leadership ki wajah se woh sabse upar hai.",
+            [{"role": "assistant", "content": "Woh top par kyun hai?"}],
+        ).lower()
+        self.assertIn("leadership_or_ability_praise=yes", cues)
+        self.assertIn("agreement_or_confirmation=yes", cues)
+
+    def test_emoji_cues_remain_uncertain_and_contextual(self):
+        cues = analyze("🙄💀", []).lower()
+        self.assertIn("sarcasm_or_disbelief_possible", cues)
+        self.assertIn("hints only", cues)
 
 
 if __name__ == "__main__":
