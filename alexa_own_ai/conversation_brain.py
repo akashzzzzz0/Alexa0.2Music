@@ -1,7 +1,7 @@
 """Conversation-focused response layer for Alexa Own AI.
 
-This is a deterministic, low-memory dialogue layer. It improves common
-conversation and follow-up handling without pretending to be a trained LLM.
+Confident local matches handle familiar short turns; open-ended messages are
+left for the hosted model router instead of being answered with canned prompts.
 """
 import re
 
@@ -50,14 +50,16 @@ UR = {
     "default_follow": "Achha, main samajh rahi hoon. Aage batao.",
 }
 
+
 def _history_text(history):
     items = [x for x in history if isinstance(x, dict)]
     last_user = next((str(x.get("content", "")) for x in reversed(items) if x.get("role") == "user"), "")
     last_assistant = next((str(x.get("content", "")) for x in reversed(items) if x.get("role") == "assistant"), "")
     return last_user, last_assistant
 
+
 def respond(message, normalized, language, history):
-    """Return a context-aware reply, or None when this layer has no confident match."""
+    """Return a confident local reply, or None for generative model routing."""
     t = normalized
     roman = language != "en"
     bank = UR if roman else EN
@@ -65,18 +67,19 @@ def respond(message, normalized, language, history):
     prev = last_assistant.lower()
     words = set(t.split())
 
-    # Short, natural Roman Urdu small-talk and playful teasing.
+    # Calls and greetings should sound like natural chat, not a clarification.
     if re.search(r"\b(alexa\s+)?(baby|babu)\b", t):
-        return "Ji, bolo 😊" if roman else "Hey, go ahead."
-    if re.fullmatch(r"(oye|suno|hello|hi)[!. ]*", t):
-        return "Ji, bolo 😊" if roman else "Hey, go ahead."
+        return "Haan bolo, kya baat hai? 😊" if roman else "Hey, what's up?"
+    if re.fullmatch(r"(oye|oy+|suno)[!. ]*", t):
+        return "Haan ji, bolo 😊" if roman else "Hey, go ahead."
+    if re.fullmatch(r"(hello|hi)[!. ]*", t):
+        return "Hey! How's it going? What's up?" if language == "en" else "Haan ji, bolo 😊"
     if re.search(r"\b(baat karni hai|baat krni hai|mujhe baat karni|talk karni hai|want to talk)\b", t):
         return "Haan ji, bolo. Kya baat hai?" if roman else "Sure, what's up?"
     if re.search(r"\b(tum pagal ho|tu pagal hai|pagal ho tum|you are crazy|you're crazy)\b", t):
         return "Achha ji? Maine kya kar diya? 😄" if roman else "Oh really? What did I do? 😄"
 
-    # Natural, context-aware Roman Urdu chat patterns. Keep these ahead of the LLM
-    # so short everyday turns do not receive formal or unrelated generated replies.
+    # Natural Roman Urdu chat patterns.
     if re.search(r"\b(lag bhag|lagbhag|taqreeban|almost)\b", t) and re.search(r"\b(sahi|theek|thik)\b", t) and re.search(r"\b(chal|work|kaam)\w*\b", t):
         return "Haan ji, ab kaafi behtar chal rahi hoon 😄" if roman else "Yes, things are working much better now. 😄"
     if re.fullmatch(r"(or|aur) batao( alexa)?[!. ]*", t) or re.fullmatch(r"(or|aur) btao( alexa)?[!. ]*", t):
@@ -90,13 +93,11 @@ def respond(message, normalized, language, history):
     if re.fullmatch(r"(bolo|bol|batao|btao|haan bolo)[!. ]*", t):
         return "Haan ji, bolo—sun rahi hoon 😊" if roman else "Go ahead, I'm listening. 😊"
 
-    # Preserve the exact real-world conversation that exposed the repeated fallback.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return ("Yes, all good here. I was right here—how are you?" if not roman
                 else "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?")
 
-    # Explicitly handle user feedback that Alexa did not understand.
-    # These checks must run before generic short-follow-up and clarification rules.
+    # Acknowledge failed replies and corrections instead of repeating prompts.
     if re.search(r"\b(wtf|wtf+|what the hell|what the heck|ye kya|kya bakwas|bakwas)\b", t):
         return ("That reply was off. What did you mean? I'll answer directly."
                 if not roman else "Arey, mera jawab ghalat tha kya? Batao, main seedha jawab deti hoon.")
@@ -106,17 +107,12 @@ def respond(message, normalized, language, history):
     if re.search(r"\b(meri baat|mujhe|mujy|mujhko)\b", t) and re.search(r"\b(nahi|nhi|nahin)\b", t) and re.search(r"\b(samajh|samj|understand)\w*\b", t):
         return ("You're right, I missed your point. What should I respond to?"
                 if not roman else "Sahi keh rahe ho, main tumhari baat miss kar gayi. Tum kya keh rahe the?")
-
-    # Repair a short correction after Alexa has already asked the user to rephrase.
-    # Do not repeat the same clarification; acknowledge and continue naturally.
     if re.search(r"\b(nhi|nahi|nahin|no)\b", t) and re.search(r"\b(ese|aise|aisay|is tarah|normal|samj|samajh)\w*\b", t):
         if any(k in prev for k in ("rephrase", "doosre", "context", "samajh", "listening", "words")):
             return "Haan, ab samajh gayi. Tum normal baat karo, main follow kar rahi hoon."
-    # Handle common shortened Roman Urdu spelling and incomplete greetings.
     if re.fullmatch(r"(kese|kaise|kaisay) ha(n)?", t):
         return "Main theek hoon, tum sunao? 😊"
 
-    # Conversational repair: understand why the user is asking for clarification.
     if re.search(r"\b(kya matlab|matlab kya|what do you mean|meaning kya|kis liye|kyun poocha|why ask)\b", t):
         return bank["meaning"]
     if re.search(r"\b(dobara|phir se|repeat|again|samjhao|samjha do|explain again)\b", t):
@@ -127,14 +123,11 @@ def respond(message, normalized, language, history):
                     else "Arey, meri galti! Tumhari pehli baat samajh aa gayi thi—mujhe dobara poochna nahi chahiye tha.")
         return bank["ask_clarify"]
 
-    # Replies that depend on the last assistant turn, not just keywords.
     if re.fullmatch(r"(haan|han|yes|yeah|yep|ok|okay|theek|thik|acha|achha|bilkul|sure|hmm+)[!. ]*", t):
         if any(q in prev for q in ("want to tell", "batao", "kya hua", "what happened", "go on", "aage")):
             return bank["encourage"]
         return bank["agree"]
     if re.fullmatch(r"(nahi|nahin|no|nope|not really)[!. ]*", t):
-        if any(q in prev for q in ("do you mean", "kya tum", "would you", "chahte")):
-            return bank["disagree"]
         return bank["disagree"]
     if re.fullmatch(r"(aur|phir|then|and then|uske baad|aage|go on|tell me more)[!. ]*", t):
         return bank["encourage"]
@@ -147,19 +140,14 @@ def respond(message, normalized, language, history):
         return ("That's okay. We can chat casually. How has your day been?" if not roman
                 else "Koi baat nahi. Aise hi baat karte hain. Aaj din kaisa guzra?")
 
-    # Casual questions about Alexa's day (including common Roman Urdu spellings/typos).
     if re.search(r"\b(how('?s| is) your day|how has your day been|how('s| is) your day going)\b", t):
         return bank["day_back"]
     if re.search(r"\b(tumhara|aapka|apka)?\s*din\b", t) and re.search(r"\b(kesa|kaisa|kaise|kese|kesaa)\b", t) and re.search(r"\b(ha|hai|he|raha|rahi|guzar|guzra|guzri|chal)\w*\b", t):
         return bank["day_back"]
-
-    # Natural response when the user asks whether Alexa remembers them.
     if re.search(r"\b(kyu|kyun|q|why)\b", t) and re.search(r"\b(yaad|remember)\b", t) and re.search(r"\b(tumhe|tumhein|mujhe|me)\b", t):
         return ("Arey, tumhari baatein yaad rakhne ki koshish karti hoon 😊 Is chat ki baatein yaad hain; purani chat ki har detail zaroori nahi yaad rahe." if roman
                 else "I do my best to remember what you tell me 😊 I can follow this chat, though I may not retain every detail from older chats.")
 
-    # Reassurance: the user is asking whether Alexa understands them.
-    # Match natural Roman Urdu/Hindi variants instead of sending a generic fallback.
     if re.search(r"\b(tum|aap)\b", t) and re.search(r"\b(mujhe|mujy|mujhko|mujh|meri baat|my)\b", t) and re.search(r"\b(samajh|samaj|understand)\w*\b", t):
         if re.search(r"\b(sakti|sakte|sakta|paogi|paoge|can|right|na|hai|ho)\b", t):
             return ("Yes, I can understand you. You can speak naturally—I’m listening." if not roman
@@ -168,7 +156,6 @@ def respond(message, normalized, language, history):
         return ("Yes, I can understand you. You can speak naturally—I’m listening." if not roman
                 else "Haan ji, bilkul samajh sakti hoon 😊 Tum apni baat normally batao, main dhyan se sun rahi hoon.")
 
-    # Common conversational intents and questions about Alexa.
     if re.search(r"\b(kaisi ho|kaise ho|kese ho|kese ha|kaise ha|kaisa ha|kaisa hai|kesa hai|how are you|how r u|sab theek|sab thik|sab thek)\b", t):
         return bank["how_back"]
     if re.search(r"\b(kya\s+kar\s+(?:rahi|rahe|rhi|rhe|ri|re)(?:\s+ho)?|kya\s+kr\s+(?:rahi|rahe|rhi|rhe|ri|re)(?:\s+ho)?|what\s+are\s+you\s+doing|what\s+r\s+u\s+doing)\b", t):
@@ -192,7 +179,6 @@ def respond(message, normalized, language, history):
     if re.search(r"\b(bore|boring|pak gaya|pak gayi|bored)\b", t):
         return bank["bored"]
 
-    # Short follow-up questions: use the prior assistant prompt as a clue.
     if len(words) <= 4 and re.search(r"\b(kyun|kaise|how|why|kis liye|what|kya)\b", t):
         if any(k in prev for k in ("batao", "tell me", "what happened", "kya hua", "which", "kaunsa")):
             return bank["ask_clarify"]
@@ -200,3 +186,8 @@ def respond(message, normalized, language, history):
         return bank["default_follow"]
 
     return None
+
+
+if __name__ == "__main__":
+    import unittest
+    unittest.main()
