@@ -242,19 +242,9 @@ def response_for(message, history):
     t = normalize(raw)
     r = REPLIES[lang]
 
-    # Give the configured language model first chance to understand the complete
-    # message in context. The old ordering let keyword rules intercept ordinary
-    # sentences and emoji-only messages before the model could interpret them.
-    # Keep arithmetic local for deterministic, exact results.
-    math_candidate = bool(
-        re.search(r"\d\s*[+*/%\-]\s*\d", t)
-        or re.search(r"\d\s*[×÷^]\s*\d", raw)
-    )
-    if raw and not math_candidate:
-        model_reply = local_model_generate(raw, history)
-        if model_reply:
-            return model_reply
-
+    # The installed bootstrap router (conversation_respond) handles local
+    # dialogue matches and performs at most one hosted-model request. Calling
+    # the model here first caused a second inference attempt after a timeout.
     # If no model is configured/available, retain the local fallback behavior.
     if not t:
         return r["hello"]
