@@ -80,21 +80,9 @@ def detect_language(raw):
     if script == "ur":
         return "ur"
     t = normalize(raw)
-    if any(phrase in t for phrase in ("kya haal hai", "kya haal hain", "kaisay ho", "kese ho")):
-        return "ur"
-    words = set(t.split())
-    scores = {
-        "pa": len(words & {"ki", "aa", "assi", "tussi", "tainu", "menu", "veere", "yaar", "kiwen", "kida", "vadhiya", "changa", "ji", "oye", "praa", "paji", "tuhada", "tuhanu", "sada", "sadde", "kithe", "kithhe", "vich", "naal", "hor", "balle", "ve", "ae"}),
-        "hi": len(words & {"hai", "kaise", "kaisa", "kaisi", "mujhe", "tumhe", "tum", "kyun", "kya", "accha", "achha", "bahut", "mera", "meri", "karna", "kar", "rahe", "rahi", "raha", "ho", "kahan", "chahiye", "batao"}),
-        "ur": len(words & {"hain", "hoon", "aap", "ap", "kya", "kaise", "kaisay", "mujhe", "tum", "aapko", "acha", "bohat", "nahi", "nahin", "batao", "suno", "shukriya"})
-    }
-    if scores["pa"] >= 2 and scores["pa"] >= max(scores["hi"], scores["ur"]):
-        return "pa"
-    if scores["hi"] > scores["ur"]:
-        return "hi"
-    if scores["ur"] > 0:
-        return "ur"
-    if re.search(r"\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they)\b", t):
+    # Only two reply modes: English, or Roman Hindi/Urdu.
+    # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
+    if re.search(r"\\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for)\\b", t):
         return "en"
     return "ur"
 
@@ -238,6 +226,17 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
+
+    # Natural Roman Hindi/Urdu small talk and conversational repair.
+    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha thi|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
+        return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
+    if re.search(r"\\b(kis|kaun se|kon se)\\b", t) and re.search(r"\\b(alfaz|lafz|ilfaz|words|tarah)\\b", t) and re.search(r"\\b(samj|samajh|samjhe|samjha)\\w*\\b", t):
+        prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
+        if any(word in prior for word in ("rephrase", "doosre alfaaz", "apne words", "context", "samajh")):
+            return "Arey, meri galti! Tumne bilkul theek kaha tha. Tumhari pehli baat samajh aa gayi thi—mujhe dobara poochna nahi chahiye tha."
+        return "Mera matlab hai, jis tarah tum normally baat karte ho usi tarah batao. Main samajhne ki koshish karungi."
+    if re.fullmatch(r"(are+ yaar|aray yaar|oye yaar|uff yaar|yaar)[!. ]*", t):
+        return "Arey kya hua? Meri baat se confusion hua kya? Batao, main dhyan se samajhti hoon."
     # Common speech-to-text and casual Roman Urdu spellings for "speak / go ahead".
     if re.fullmatch(r"(?:bool|bol|bo+l+)\s*(?:ly+|le|na|do)?", t) or t in {"bolo", "bolo na", "bol na", "bolly", "bollyy", "suno", "sun na", "sunn"}:
         if lang == "en":
