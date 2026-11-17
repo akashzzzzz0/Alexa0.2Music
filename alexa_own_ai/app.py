@@ -126,9 +126,9 @@ def answer(message, history=None):
         return "Achha! Batao, aur kya chal raha hai?"
     if has_any(t, ("no", "nahi", "nahin", "nope")) and len(t.split()) <= 3:
         return "Theek hai, koi masla nahi. Kuch aur baat karni hai?"
-    return ("Main ne tumhara message samajhne ki koshish ki, lekin is lightweight offline engine ko "
-            "is sawal ka bharosemand jawab nahi aata. Full conversation ke liye online AI provider "
-            "available hona zaroori hai.")
+    # None means this local engine has no reliable answer. The API marks it as
+    # a normal fallback condition so Alexa can immediately try Gemini/Groq.
+    return None
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
@@ -171,7 +171,8 @@ class Handler(BaseHTTPRequestHandler):
             history = body.get("history", [])
             if not isinstance(history, list):
                 history = []
-            return self.send_json(200, {"reply": answer(message, history[-MAX_HISTORY:]),
+            reply = answer(message, history[-MAX_HISTORY:])
+            return self.send_json(200, {"reply": reply or "", "fallback": reply is None,
                 "provider": "alexa-own-ai-micro", "is_llm": False})
 
         messages = body.get("messages", [])
@@ -184,10 +185,11 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         history = [x for x in messages[-MAX_HISTORY:] if isinstance(x, dict)]
+        reply = answer(message, history)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro", "object": "chat.completion",
             "choices": [{"index": 0, "message": {"role": "assistant",
-                "content": answer(message, history)}, "finish_reason": "stop"}]
+                "content": reply or ""}, "finish_reason": "stop" if reply is not None else "fallback"}]
         })
 
     def log_message(self, fmt, *args):
