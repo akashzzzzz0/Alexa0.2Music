@@ -21,6 +21,48 @@ class AlexaOwnAIModelQualityTests(unittest.TestCase):
         ))
 
 
+class AlexaOwnAIDeepUnderstandingTests(unittest.TestCase):
+    def test_correction_is_prioritized_over_generic_question_cues(self):
+        cues = model_runtime.deep_understanding.analyze(
+            "Nahi, mera matlab ye nahi tha", []
+        )
+        self.assertIn("message_act=correction_or_disagreement", cues)
+        self.assertIn("acknowledge_correction_first", cues)
+
+    def test_short_followup_is_linked_to_previous_assistant_question(self):
+        history = [
+            {"role": "assistant", "content": "Which part did you mean?"},
+        ]
+        cues = model_runtime.deep_understanding.analyze("Wohi second wala", history)
+        self.assertIn("message_act=answer_to_previous_question", cues)
+        self.assertIn("previous_assistant_asked_question=yes", cues)
+
+    def test_emoji_cues_are_contextual_and_not_asserted_as_certain(self):
+        cues = model_runtime.deep_understanding.analyze("😂❤️", [])
+        self.assertIn("amused_or_laughing", cues)
+        self.assertIn("warm_or_appreciative", cues)
+        self.assertIn("heuristic cues, not certainties", cues)
+
+    def test_model_messages_include_structured_understanding(self):
+        messages = model_runtime._messages(
+            "Nahi, mera matlab kuch aur tha",
+            [{"role": "assistant", "content": "So you agree?"}],
+        )
+        analysis = messages[0]["content"]
+        self.assertIn("message_act=correction_or_disagreement", analysis)
+        self.assertEqual(messages[-1]["content"], "Nahi, mera matlab kuch aur tha")
+
+    def test_self_hosted_model_repeated_reply_is_rejected(self):
+        history = [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello, how can I help?"},
+        ]
+        with mock.patch.dict(os.environ, {"ALEXA_LOCAL_MODEL_URL": "http://localhost:8000"}), \
+             mock.patch.object(model_runtime, "_cloudflare_generate", return_value=None), \
+             mock.patch.object(model_runtime, "_local_generate", return_value="Hello, how can I help?"):
+            self.assertIsNone(model_runtime.generate("Hi again", history))
+
+
 class AlexaOwnAILanguageTests(unittest.TestCase):
     def test_english_stays_english(self):
         self.assertEqual(app.detect_language("Hello, how are you?"), "en")

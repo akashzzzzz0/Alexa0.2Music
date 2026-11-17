@@ -6,6 +6,11 @@ import urllib.parse
 import urllib.request
 import time
 
+try:
+    from . import deep_understanding
+except ImportError:  # Support the service's legacy direct-module launch path.
+    import deep_understanding
+
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
 MAX_CONTEXT_MESSAGES = 14
@@ -109,6 +114,7 @@ def _messages(message, history):
         "For a simple call like 'oye suno' or 'baat sun', answer naturally and briefly, "
         "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
+    system_prompt += "\n\n" + deep_understanding.analyze(message, history)
     messages = [{"role": "system", "content": system_prompt}]
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
         if not isinstance(item, dict):
@@ -330,7 +336,7 @@ def generate(message, history):
     remaining = deadline - time.monotonic()
     if remaining >= 1.0 and os.getenv("ALEXA_LOCAL_MODEL_URL", "").strip():
         answer = _local_generate(message, history, timeout=min(_timeout(), remaining))
-        if answer and not _is_unprompted_meta_reply(message, answer):
+        if answer and not _is_unprompted_meta_reply(message, answer) and not _is_repeated_reply(history, answer):
             print("Alexa inference completed via self-hosted model in {:.2f}s.".format(time.monotonic() - started), flush=True)
             return answer
         if answer:

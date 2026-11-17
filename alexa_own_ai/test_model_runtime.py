@@ -148,5 +148,50 @@ class ModelRuntimeTests(unittest.TestCase):
         self.assertIn("latest relevant exchange", messages[0]["content"])
         self.assertIn("quoted or mentioned phrase", messages[0]["content"])
 
+
+    def test_deep_understanding_prioritizes_user_corrections(self):
+        cues = model_runtime.deep_understanding.analyze(
+            "Nahi, mera matlab ye nahi tha", []
+        )
+        self.assertIn("message_act=correction_or_disagreement", cues)
+        self.assertIn("acknowledge_correction_first", cues)
+
+    def test_deep_understanding_links_short_answer_to_previous_question(self):
+        history = [{"role": "assistant", "content": "Which part did you mean?"}]
+        cues = model_runtime.deep_understanding.analyze("Wohi second wala", history)
+        self.assertIn("message_act=answer_to_previous_question", cues)
+        self.assertIn("previous_assistant_asked_question=yes", cues)
+
+    def test_deep_understanding_reads_emoji_as_uncertain_contextual_cues(self):
+        cues = model_runtime.deep_understanding.analyze("😂❤️", [])
+        self.assertIn("amused_or_laughing", cues)
+        self.assertIn("warm_or_appreciative", cues)
+        self.assertIn("heuristic cues, not certainties", cues)
+
+    def test_model_prompt_includes_deep_understanding_without_extra_turn(self):
+        messages = model_runtime._messages(
+            "Nahi, mera matlab kuch aur tha",
+            [{"role": "assistant", "content": "So you agree?"}],
+        )
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertIn("message_act=correction_or_disagreement", messages[0]["content"])
+        self.assertEqual(messages[-1]["content"], "Nahi, mera matlab kuch aur tha")
+
+    def test_self_hosted_repeated_reply_is_rejected(self):
+        history = [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello, how can I help?"},
+        ]
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_ACCOUNT_ID": "",
+            "CLOUDFLARE_API_TOKEN": "",
+            "ALEXA_LOCAL_MODEL_URL": "http://127.0.0.1:8080/v1",
+        }, clear=False), patch(
+            "model_runtime._cloudflare_generate", return_value=None
+        ), patch(
+            "model_runtime._local_generate", return_value="Hello, how can I help?"
+        ):
+            self.assertIsNone(model_runtime.generate("Hi again", history))
+
 if __name__ == "__main__":
     unittest.main()
