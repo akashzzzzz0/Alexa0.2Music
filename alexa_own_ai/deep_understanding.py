@@ -15,6 +15,7 @@ _EMOJI_GROUPS = (
     (("😡", "🤬", "😤"), "frustrated_possible"),
     (("👍", "👌", "✅"), "acknowledgement_or_approval"),
     (("🤔", "❓", "⁉️"), "thinking_or_questioning"),
+    (("🫠",), "awkward_or_overwhelmed_possible"),
 )
 
 _CORRECTION = (
@@ -123,6 +124,8 @@ def analyze(message, history):
     # than as a fresh, isolated question/request classification.
     if owner_assertion:
         act = "owner_relationship_assertion"
+    elif ranking_question:
+        act = "ranking_or_comparison_question"
     elif correction:
         act = "correction_or_disagreement"
     elif greeting:
