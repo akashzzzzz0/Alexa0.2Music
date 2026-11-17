@@ -47,6 +47,22 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
                 self.assertTrue(reply.strip())
                 self.assertTrue(any(part.casefold() in reply.casefold() for part in expected_parts), reply)
 
+
+    def test_natural_short_chat_turns_do_not_repeat_generic_fallback(self):
+        self.assertIn("kya baat", app.response_for("Baby", []).lower())
+        self.assertIn("dil mein", app.response_for("Axha Kya du", []).lower())
+        history = [
+            {"role": "user", "content": "Baby"},
+            {"role": "assistant", "content": "Haan, main sun rahi hoon. Thora aur context de do taake main sahi jawab de sakun."},
+        ]
+        reply = app.response_for("Hain", history)
+        self.assertIn("normal baat", reply.lower())
+        self.assertNotIn("thora aur context", reply.lower())
+
+    def test_unknown_reply_is_not_the_old_repeated_fallback(self):
+        reply = app.response_for("Aaj kuch ajeeb hua", [])
+        self.assertNotIn("thora aur context", reply.lower())
+
     def test_unknown_message_gets_a_nonempty_clarification(self):
         for message in ("Aaj kuch ajeeb hua", "Tell me something unusual", "Mujhe samajh nahi aa raha"):
             with self.subTest(message=message):

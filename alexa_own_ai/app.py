@@ -305,15 +305,53 @@ def response_for(message, history):
     if re.search(r"\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", t):
         today = dt.datetime.now().astimezone().strftime("%d %B %Y")
         return ("Today's date is " if lang == "en" else "Ajj di tareekh " if lang == "pa" else "Aaj ki tareekh ") + today + "."
-    # Contextual follow-up: acknowledge a topic from the recent conversation.
+    # Short conversational turns need context-sensitive replies, not the same
+    # generic clarification on every message.
+    words = set(t.split())
+    if t in {"baby", "babu", "babyy", "oye baby", "oy baby", "hmm", "hmmm"}:
+        if lang == "en":
+            return "Hey, I'm here. What did you want to tell me?"
+        if lang == "pa":
+            return "Oye, dasso ji! Ki gall karni aa?"
+        return "Haan bolo, kya baat hai?"
+    if re.search(r"\b(axha|acha|achha|accha)\b", t) and re.search(r"\b(kya du|kia du|kya doon|kia doon|kya btaun|kya bataun|kya bolun)\b", t):
+        if lang == "en":
+            return "Just tell me what's on your mind. I'm listening."
+        if lang == "pa":
+            return "Jo dil vich aa, dass deo ji. Main sun rahi aan."
+        return "Jo dil mein hai woh bata do, main sun rahi hoon."
+    if t in {"hain", "hein", "han", "huh", "what", "kya", "kyaa", "acha", "achha", "axha"} or t.endswith("?") and len(t.split()) <= 2:
+        previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
+        if any(token in previous_assistant for token in ("context", "samajh", "listening", "batao", "tell me")):
+            if lang == "en":
+                return "I mean, you can talk to me normally. What's going on?"
+            if lang == "pa":
+                return "Mera matlab, tussi aam gall karo ji. Ki hoya?"
+            return "Mera matlab, tum mujhse normal baat kar sakte ho. Kya chal raha hai?"
+        if lang == "en":
+            return "What happened? Tell me a little more."
+        if lang == "pa":
+            return "Ki hoya ji? Thoda hor dasso."
+        return "Kya hua? Thoda aur batao na."
+    # Contextual follow-up: resolve short replies against the previous turn.
     if history:
         last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
-        if last_user and any(w in t.split() for w in ("why", "kyun", "kaise", "how", "phir", "then", "aur")):
+        previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
+        if last_user and any(w in words for w in ("why", "kyun", "kaise", "how", "phir", "then", "aur")):
             if lang == "en": return "You're asking about what we were just discussing. Which part should I explain first?"
             if lang == "hi": return "Tum pichhli baat ke baare mein pooch rahe ho na? Kaunsa hissa samjhaun?"
             if lang == "pa": return "Tussi pichhli gall baare puchh rahe o? Kehda hissa samjhaavaan?"
             return "Aap pichhli baat ke bare mein pooch rahe hain? Kaunsa hissa samjhaun?"
-    return r["unknown"]
+        if previous_assistant and any(x in previous_assistant for x in ("context", "samajh", "listening")):
+            if lang == "en": return "No pressure—say it in your own words. I'm following."
+            if lang == "pa": return "Koi gall nahi, apne lafzan vich dasso. Main samajhan di koshish kar rahi aan."
+            return "Koi masla nahi, apne alfaaz mein batao. Main samajhne ki koshish kar rahi hoon."
+    # Vary unknown-message prompts so unrelated messages don't receive a repeated canned line.
+    if lang == "en":
+        return "I want to get what you mean. Can you say that another way?"
+    if lang == "pa":
+        return "Main tuhadi gall samajhna chaundi haan. Thoda hor dasso ji?"
+    return "Main tumhari baat samajhna chahti hoon. Zara apne words mein batao na?"
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload):
