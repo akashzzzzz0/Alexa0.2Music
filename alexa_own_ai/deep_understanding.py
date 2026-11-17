@@ -16,6 +16,10 @@ _EMOJI_GROUPS = (
     (("👍", "👌", "✅"), "acknowledgement_or_approval"),
     (("🤔", "❓", "⁉️"), "thinking_or_questioning"),
     (("🫠",), "awkward_or_overwhelmed_possible"),
+    (("😎", "🔥", "👏"), "approval_or_celebration_possible"),
+    (("🙃",), "dry_humor_or_disbelief_possible"),
+    (("😮", "😲", "🤯"), "surprise_possible"),
+    (("🥳", "🎉", "✨"), "celebration_possible"),
 )
 
 _CORRECTION = (
@@ -111,6 +115,19 @@ def analyze(message, history):
         r"\b(sad|udaas|pareshan|worried|tension|happy|khush|excited|"
         r"hurt|dukhi|pareshani|ghussa|gussa|naraz|naraaz)\b", text
     ))
+    praise = bool(re.search(
+        r"\b(great|amazing|excellent|strong|best|brilliant|smart|leadership|"
+        r"talented|well done|shabash|zabardast|kamaal|bohat acha|bohat achi|"
+        r"tareef|qabil|lajawab)\b", text
+    ))
+    agreement = bool(re.search(
+        r"\b(haan|han|bilkul|sahi|theek|exactly|right|true|agreed|"
+        r"you're right|you are right|correct|that's why|isi liye|is wajah se)\b", text
+    ))
+    disappointment = bool(re.search(
+        r"\b(disappointed|disappointing|expected better|bura laga|afsoos|"
+        r"mayoos|umeed thi|not happy|upset)\b", text
+    ))
     negation = bool(re.search(
         r"\b(no|not|never|don't|doesn't|didn't|nahi|nahin|nhi|mat|"
         r"bilkul nahi|aisa nahi|aise nahi)\b", text
@@ -130,6 +147,12 @@ def analyze(message, history):
         act = "correction_or_disagreement"
     elif greeting:
         act = "greeting"
+    elif praise:
+        act = "leadership_or_ability_praise"
+    elif agreement:
+        act = "agreement_or_confirmation"
+    elif disappointment:
+        act = "disappointment_or_hurt"
     elif gratitude:
         act = "gratitude"
     elif apology:
@@ -172,6 +195,9 @@ def analyze(message, history):
         "answer_to_previous_question": "connect_this_answer_to_the_assistant_question_and_continue_that_thread",
         "contextual_followup": "resolve_pronouns_and_omitted_subjects_from_the_closest_relevant_turns",
         "emotional_share": "acknowledge_the_expressed_feeling_without_inventing_its_cause",
+        "leadership_or_ability_praise": "resolve who or what is being praised from context; never assume the praise is about Alexa",
+        "agreement_or_confirmation": "connect agreement to the preceding claim and respond to the added reasoning, not with generic acknowledgement",
+        "disappointment_or_hurt": "recognize disappointment and address its cause only when supported by context",
         "gratitude": "respond_warmly_without_reopening_a_finished_topic",
         "apology": "accept_or_reassure_briefly_without_overdoing_it",
         "playful_message": "match_the_light_tone_only_if_the_words_and_context_support_it",
@@ -189,6 +215,9 @@ def analyze(message, history):
         "contains_possible_correction=" + ("yes" if correction else "no"),
         "explicit_owner_relationship_statement=" + ("yes" if owner_assertion else "no"),
         "contains_request=" + ("yes" if request else "no"),
+        "leadership_or_ability_praise=" + ("yes" if praise else "no"),
+        "agreement_or_confirmation=" + ("yes" if agreement else "no"),
+        "disappointment_or_hurt=" + ("yes" if disappointment else "no"),
         "contains_question=" + ("yes" if question else "no"),
         "asks_about_number_one_or_ranking=" + ("yes" if ranking_question else "no"),
         "tone_cues=" + (",".join(tones) if tones else "none_detected"),
