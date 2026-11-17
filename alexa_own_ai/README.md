@@ -13,7 +13,7 @@ third-party AI API calls, and no external provider keys.
   answered in Roman text (never Urdu or Devanagari script).
 - Handle greetings, small talk, basic emotional acknowledgements, jokes,
   date/time and safe arithmetic.
-- Use the latest five messages as context when a stable conversation identifier
+- Use the latest twenty messages as context when a stable conversation identifier
   is supplied.
 - Store conversation turns in SQLite, separately per conversation.
 
