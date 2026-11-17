@@ -6,7 +6,6 @@ per conversation in SQLite. It never calls third-party AI providers.
 """
 import ast
 import datetime as dt
-import hashlib
 import hmac
 import json
 import math
@@ -25,7 +24,7 @@ DB_LOCK = threading.RLock()
 
 # Approximate transliteration for common Urdu and Hindi chat vocabulary.
 URDU = {
-"ا":"a","آ":"aa","ب":"b","پ":"p","ت":"t","ٹ":"t","ث":"s","ج":"j","چ":"ch","ح":"h","خ":"kh","د":"d","ڈ":"d","ذ":"z","ر":"r","ڑ":"r","ز":"z","ژ":"zh","س":"s","ش":"sh","ص":"s","ض":"z","ط":"t","ظ":"z","ع":"","غ":"gh","ف":"f","ق":"q","ک":"k","گ":"g","ل":"l","م":"m","ن":"n","ں":"n","و":"o","ؤ":"o","ہ":"h","ھ":"h","ۃ":"h","ء":"","ئ":"i","ی":"i","ے":"e","َ":"a","ِ":"i","ُ":"u","ّ":"","ً":"an","ٍ":"in","ٌ":"un","ٓ":""
+"ا":"a","آ":"aa","ب":"b","پ":"p","ت":"t","ٹ":"t","ث":"s","ج":"j","چ":"ch","ح":"h","خ":"kh","د":"d","ڈ":"d","ذ":"z","ر":"r","ڑ":"r","ز":"z","ژ":"zh","س":"s","ش":"sh","ص":"s","ض":"z","ط":"t","ظ":"z","ع":"","غ":"gh","ف":"f","ق":"q","ک":"k","گ":"g","ل":"l","م":"m","ن":"n","ں":"n","و":"o","ؤ":"o","ہ":"h","ھ":"h","ۃ":"h","ء":"","ئ":"i","ی":"i","ي":"i","ك":"k","ى":"a","ے":"e","َ":"a","ِ":"i","ُ":"u","ّ":"","ً":"an","ٍ":"in","ٌ":"un","ٓ":""
 }
 DEV = {
 "अ":"a","आ":"aa","इ":"i","ई":"ee","उ":"u","ऊ":"oo","ऋ":"ri","ए":"e","ऐ":"ai","ओ":"o","औ":"au",
@@ -83,8 +82,8 @@ def detect_language(raw):
     t = normalize(raw)
     words = set(t.split())
     scores = {
-        "pa": len(words & {"ki", "aa", "assi", "tussi", "tainu", "menu", "veere", "yaar", "kiwen", "kida", "vadhiya", "changa", "ji", "oye", "praa", "paji"}),
-        "hi": len(words & {"hai", "hain", "kaise", "kaisa", "kaisi", "mujhe", "tumhe", "aap", "kyun", "kya", "accha", "achha", "bahut", "mera", "meri", "karna", "batao"}),
+        "pa": len(words & {"ki", "aa", "assi", "tussi", "tainu", "menu", "veere", "yaar", "kiwen", "kida", "vadhiya", "changa", "ji", "oye", "praa", "paji", "tuhada", "tuhanu", "sada", "sadde", "kithe", "kithhe", "vich", "naal", "hor", "balle", "ve", "ae"}),
+        "hi": len(words & {"hai", "kaise", "kaisa", "kaisi", "mujhe", "tumhe", "tum", "kyun", "kya", "accha", "achha", "bahut", "mera", "meri", "karna", "kar", "rahe", "rahi", "raha", "ho", "kahan", "chahiye", "batao"}),
         "ur": len(words & {"hain", "hoon", "aap", "ap", "kya", "kaise", "kaisay", "mujhe", "tum", "aapko", "acha", "bohat", "nahi", "nahin", "batao", "suno", "shukriya"})
     }
     if scores["pa"] >= 2 and scores["pa"] >= max(scores["hi"], scores["ur"]):
@@ -110,6 +109,9 @@ REPLIES = {
 "bye":"See you later! Take care.",
 "yes":"Alright! Tell me a little more.",
 "no":"No worries. What would you rather talk about?",
+"doing":"Just here chatting with you. What are you up to?",
+"where":"I am right here in this chat. What is up?",
+"whatsup":"Not much, just chatting with you. How about you?",
 "unknown":"I can chat and help with simple offline tasks, but I don't have a full language model installed. Tell me a bit more and I'll do my best."
 },
 "ur": {
@@ -124,6 +126,9 @@ REPLIES = {
 "bye":"Allah hafiz! Phir baat hoti hai. Apna khayal rakhna!",
 "yes":"Achha ji! Thora aur batao, phir main behtar samajh sakungi.",
 "no":"Theek hai, koi masla nahi. Phir kis bare mein baat karein?",
+"doing":"Bas yahin tumse baat kar rahi hoon. Tum sunao?",
+"where":"Yahin chat mein hoon. Batao, kya scene hai?",
+"whatsup":"Bas tumse baat ho rahi hai. Tum sunao, kya haal hai?",
 "unknown":"Main aapki baat samajhne ki koshish kar rahi hoon. Thora aur context de do; mere paas abhi full generative model nahi hai."
 },
 "hi": {
@@ -138,6 +143,9 @@ REPLIES = {
 "bye":"Phir milte hain! Apna khayal rakhna.",
 "yes":"Achha! Thoda aur batao, main samajhne ki koshish karti hoon.",
 "no":"Koi baat nahi. Phir kis baare mein baat karein?",
+"doing":"Bas tumse baat kar rahi hoon. Tum kya kar rahe ho?",
+"where":"Yahin chat mein hoon. Tum kahan ho?",
+"whatsup":"Bas yahin hoon! Tum batao, kya chal raha hai?",
 "unknown":"Main tumhari baat samajhne ki koshish kar rahi hoon. Thoda aur context do; mere paas abhi full generative model nahi hai."
 },
 "pa": {
@@ -152,6 +160,9 @@ REPLIES = {
 "bye":"Changa fer! Apna khayal rakhyo, fer gall karde aan.",
 "yes":"Haanji, dasso fer! Hor thoda samjhao.",
 "no":"Chalo koi gall nahi ji. Hor ki gall kariye?",
+"doing":"Bas tuhade naal gallan kar rahi haan ji. Tussi dasso?",
+"where":"Ethe chat vich hi haan ji. Tussi kithe o?",
+"whatsup":"Bas gallan-baatan chal rahi aan. Tussi sunao, ki haal aa?",
 "unknown":"Main tuhadi gall samajhan di koshish kar rahi haan. Thoda hor context deyo; mere kol hale full generative model nahi."
 }
 }
@@ -219,6 +230,8 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
+    if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم")):
+        return r["hello"]
     math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\s+", "", t)
     if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
         value = safe_math(math_text if math_text != t else raw)
@@ -231,8 +244,14 @@ def response_for(message, history):
         return "Good morning! Aaj ka din kaisa ja raha hai?" if lang != "en" else "Good morning! How's your day going?"
     if re.search(r"\b(hello|hi|hii+|hey|heyy+|salam|salaam|aoa|sat sri akal|satsriakal|ki haal)\b", t):
         return r["hello"]
-    if re.search(r"\b(how are you|how r u|kaise ho|kaisay ho|kese ho|kya haal|ki haal|kida|kidda)\b", t):
+    if re.search(r"\b(how are you|how r u|kaise ho|kaise hain|kaisay ho|kese ho|kese hain|kya haal|ki haal|kida|kidda|ap kise hin|aap kaise hain)\b", t):
         return r["how"]
+    if re.search(r"\b(what are you doing|what r u doing|kya kar rahe|kya kar rahi|ki kar rahe|ki kar rahi|ki karna|ki kardi|ki karde|tussi ki karde|tussi ki kar rahe)\b", t):
+        return r["doing"]
+    if re.search(r"\b(where are you|where r u|kahan ho|kidhar ho|tussi kithe|kithe o)\b", t):
+        return r["where"]
+    if re.search(r"\b(what is up|whats up|what's up|kya chal raha|ki haal chaal|ki haal aa)\b", t):
+        return r["whatsup"]
     if re.search(r"\b(thank you|thanks|shukriya|bohat shukriya|meharbani|dhanvaad|dhanyavaad)\b", t):
         return r["thanks"]
     if re.search(r"\b(who are you|tum kon ho|tum kaun ho|aap kon|your name|naam kya|tu kaun)\b", t):
