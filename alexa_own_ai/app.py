@@ -246,7 +246,7 @@ def response_for(message, history):
     # dialogue matches and performs at most one hosted-model request. Calling
     # the model here first caused a second inference attempt after a timeout.
     # If no model is configured/available, retain the local fallback behavior.
-    if not t:
+    if not raw:
         return r["hello"]
 
     brain_reply = conversation_respond(raw, t, lang, history)
