@@ -97,6 +97,29 @@ def respond(message, normalized, language, history, context=None):
         return ("I don't live in a physical city or country; I'm a virtual assistant." if not roman
                 else "Main kisi physical shehar ya desh mein nahi rehti; main ek virtual assistant hoon. 😊")
 
+    # Acknowledge a user's explicit conversational statement that they are
+    # Alexa's owner. This is dialogue context only, never authentication for
+    # privileged actions or account access.
+    owner_assertion = re.search(
+        r"\b(?:tera|tumhara|tumhari|aapka|apki)\s+owner\s+(?:to\s+)?"
+        r"(?:mai|main|me)\s+(?:hi\s+)?(?:hu|hun|hoon|hon|na|naa)\b|"
+        r"\b(?:mai|main|me)\s+(?:hi\s+)?(?:tera|tumhara|tumhari|"
+        r"aapka|apki)\s+owner\s+(?:hu|hun|hoon|hon)\b|"
+        r"\bowner\s+(?:to\s+)?(?:mai|main|me)\s+(?:hi\s+)?"
+        r"(?:hu|hun|hoon|hon|na|naa)\b",
+        t,
+    )
+    if owner_assertion:
+        denied_owner = bool(re.search(
+            r"\b(owner\s+toh?\s+main\s+nahi|main\s+owner\s+nahi|"
+            r"owner\s+main\s+nahi)\b", prev
+        ))
+        if roman:
+            return ("Haan, tum mere owner ho—pehle maine galat jawab diya tha. Sorry 😊"
+                    if denied_owner else "Haan, samajh gayi—tum mere owner ho 😊")
+        return ("You're right, you're my owner. My previous reply was wrong—sorry."
+                if denied_owner else "Understood—you are my owner.")
+
     # Let the generative model handle genuinely multi-part messages. A local
     # phrase match must not swallow the rest of a longer request or a second question.
     clause_words = re.findall(
