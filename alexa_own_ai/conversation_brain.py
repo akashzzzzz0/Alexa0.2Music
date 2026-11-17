@@ -84,6 +84,19 @@ def respond(message, normalized, language, history, context=None):
             return "Good night! Sleep well. We'll talk tomorrow. Take care! 😊"
         return "Good night! Aaram se sona. Kal phir baat karenge. Apna khayal rakhna! 😊"
 
+    # Answer direct location/origin questions plainly; do not invent a city,
+    # country, user-count, popularity, or other unrelated self-description.
+    asks_origin = re.search(
+        r"\\b(where are you from|where do you live|which country|what country|"
+        r"which city|what city|kis desh|kis mulk|kis shehar|kis shahar|"
+        r"kahan se ho|kaha se ho|kidhar se ho|kis jagah se ho|"
+        r"tum kahan rehti|tum kahan rahti|aap kahan rehte)\\b",
+        t,
+    )
+    if asks_origin:
+        return ("I don't live in a physical city or country; I'm a virtual assistant." if not roman
+                else "Main kisi physical shehar ya desh mein nahi rehti; main ek virtual assistant hoon. 😊")
+
     # Calls and greetings should sound like natural chat, not a clarification.
     if re.search(r"\b(alexa\s+)?(baby|babu)\b", t):
         return "Haan bolo, kya baat hai? 😊" if roman else "Hey, what's up?"
