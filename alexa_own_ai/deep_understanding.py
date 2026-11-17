@@ -68,7 +68,7 @@ def analyze(message, history):
     text = raw.casefold()
     # Unicode-aware tokenization keeps Urdu/Devanagari words in the length
     # estimate instead of treating a full-script message as an empty string.
-    words = re.findall(r"[\w\u0600-\u06ff\u0900-\u097f]+", text, flags=re.UNICODE)
+    words = re.findall(r"[a-z0-9']+|[\u0600-\u06ff]+|[\u0900-\u097f]+", text, flags=re.UNICODE)
     previous_assistant = _last(history, "assistant")
     previous_user = _last(history, "user")
     previous_assistant_asked = bool(
