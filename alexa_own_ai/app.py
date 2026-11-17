@@ -114,7 +114,7 @@ REPLIES = {
 "doing":"Just here chatting with you. What are you up to?",
 "where":"I am right here in this chat. What is up?",
 "whatsup":"Not much, just chatting with you. How about you?",
-"unknown":"I can chat and help with simple offline tasks, but I don't have a full language model installed. Tell me a bit more and I'll do my best."
+"unknown":"I'm listening. Could you rephrase that or add a little context so I can understand exactly?"
 },
 "ur": {
 "hello":"Assalam o alaikum! Kya haal hain? Aaj kya scene hai?",
@@ -131,7 +131,7 @@ REPLIES = {
 "doing":"Bas yahin tumse baat kar rahi hoon. Tum sunao?",
 "where":"Yahin chat mein hoon. Batao, kya scene hai?",
 "whatsup":"Bas tumse baat ho rahi hai. Tum sunao, kya haal hai?",
-"unknown":"Main aapki baat samajhne ki koshish kar rahi hoon. Thora aur context de do; mere paas abhi full generative model nahi hai."
+"unknown":"Haan, main sun rahi hoon. Thora aur context de do taake main sahi jawab de sakun."
 },
 "hi": {
 "hello":"Arey hello! Kaise ho? Aaj kya chal raha hai?",
@@ -148,7 +148,7 @@ REPLIES = {
 "doing":"Bas tumse baat kar rahi hoon. Tum kya kar rahe ho?",
 "where":"Yahin chat mein hoon. Tum kahan ho?",
 "whatsup":"Bas yahin hoon! Tum batao, kya chal raha hai?",
-"unknown":"Main tumhari baat samajhne ki koshish kar rahi hoon. Thoda aur context do; mere paas abhi full generative model nahi hai."
+"unknown":"Haan, main sun rahi hoon. Thoda aur context do taake main sahi jawab de sakun."
 },
 "pa": {
 "hello":"Oye hoye! Ki haal aa? Sab changa?",
@@ -165,7 +165,7 @@ REPLIES = {
 "doing":"Bas tuhade naal gallan kar rahi haan ji. Tussi dasso?",
 "where":"Ethe chat vich hi haan ji. Tussi kithe o?",
 "whatsup":"Bas gallan-baatan chal rahi aan. Tussi sunao, ki haal aa?",
-"unknown":"Main tuhadi gall samajhan di koshish kar rahi haan. Thoda hor context deyo; mere kol hale full generative model nahi."
+"unknown":"Haanji, main sun rahi aan. Gall thodi hor samjha deo taake main sahi jawab de sakaan."
 }
 }
 
@@ -238,6 +238,22 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
+    # Common speech-to-text and casual Roman Urdu spellings for "speak / go ahead".
+    if re.fullmatch(r"(?:bool|bol|bo+l+)\\s*(?:ly+|le|na|do)?", t) or t in {"bolo", "bolo na", "bol na", "bolly", "bollyy", "suno", "sun na", "sunn"}:
+        if lang == "en":
+            return "I'm listening. Go ahead—what did you want to say?"
+        if lang == "pa":
+            return "Haanji, dasso! Main sun rahi aan."
+        return "Haan ji, bolo! Main sun rahi hoon."
+    # A greeting plus Alexa's name or a casual call should be treated as a direct greeting.
+    if re.search(r"\\b(alexa|oye|oy+|hello|hi|hey|baby)\\b", t) and re.search(r"\\b(alexa|oye|oy+|hello|hi|hey)\\b", t):
+        if lang == "en":
+            return "Hey! I'm here. What's up?"
+        return "Oyyyy! Haan bolo, sun rahi hoon."
+    if re.search(r"\\b(suno|sun na|listen|listen up)\\b", t):
+        if lang == "en":
+            return "I'm listening. What's up?"
+        return "Haan ji, sun rahi hoon. Bolo?"
     if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم", "سلام", "नमस्ते", "नमस्कार", "हैलो")):
         return r["hello"]
     if any(mark in raw for mark in ("آپ کیسے ہیں", "آپ کیسے ہو", "آپ کا حال")):
@@ -351,10 +367,11 @@ class Handler(BaseHTTPRequestHandler):
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
         history = get_history(conversation, messages, message)
-        reply = response_for(message, history)
+        reply = response_for(message, history) or REPLIES[detect_language(message)]["unknown"]
+        # Always return a non-empty assistant message as a completed turn.
         save_turns(conversation, message, reply)
         return self.send_json(200, {
-            "id": "alexa-own-ai-micro", "object": "chat.completion",
+            "id": "alexa-own-ai-micro-v2", "object": "chat.completion",
             "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}]
         })
 
