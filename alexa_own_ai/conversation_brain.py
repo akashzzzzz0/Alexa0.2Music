@@ -87,10 +87,10 @@ def respond(message, normalized, language, history, context=None):
     # Answer direct location/origin questions plainly; do not invent a city,
     # country, user-count, popularity, or other unrelated self-description.
     asks_origin = re.search(
-        r"\\b(where are you from|where do you live|which country|what country|"
+        r"\b(where are you from|where do you live|which country|what country|"
         r"which city|what city|kis desh|kis mulk|kis shehar|kis shahar|"
         r"kahan se ho|kaha se ho|kidhar se ho|kis jagah se ho|"
-        r"tum kahan rehti|tum kahan rahti|aap kahan rehte)\\b",
+        r"tum kahan rehti|tum kahan rahti|aap kahan rehte)\b",
         t,
     )
     if asks_origin:
