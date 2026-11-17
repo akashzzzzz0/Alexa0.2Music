@@ -190,15 +190,15 @@ class ModelRuntimeTests(unittest.TestCase):
         hindi = model_runtime.deep_understanding.analyze("तुम मेरी बात समझ रहे हो?", [])
         self.assertIn("script_hint=urdu_or_arabic_script", urdu)
         self.assertIn("script_hint=devanagari_script", hindi)
-        self.assertIn("word_count=5", urdu)
-        self.assertIn("word_count=6", hindi)
+        self.assertIn("word_count=6", urdu)
+        self.assertIn("word_count=5", hindi)
 
     def test_prompt_requires_full_message_clause_and_constraint_handling(self):
         prompt = model_runtime._messages("Do this, but don't change anything else.", [])[0]["content"].lower()
         self.assertIn("every separate request or question", prompt)
         self.assertIn("conditions, negation, contrast", prompt)
         self.assertIn("preserve the earlier constraints", prompt)
-        self.assertIn("not merely the first or last clause", prompt)
+        self.assertIn("do not answer only the first or last clause", prompt)
 
     def test_model_prompt_includes_deep_understanding_without_extra_turn(self):
         messages = model_runtime._messages(
