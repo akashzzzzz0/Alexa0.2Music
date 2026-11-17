@@ -63,6 +63,8 @@ class ModelRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["messages"][-1], {
             "role": "user", "content": "Tum samajh rahi ho?"
         })
+        self.assertEqual(payload["max_completion_tokens"], 144)
+        self.assertLessEqual(mocked.call_args.kwargs["timeout"], 8)
 
     def test_configured_model_receives_context_and_returns_reply(self):
         with patch.dict(os.environ, {
@@ -90,6 +92,19 @@ class ModelRuntimeTests(unittest.TestCase):
             with patch("urllib.request.urlopen", side_effect=OSError("offline")):
                 self.assertIsNone(model_runtime.generate("hello", []))
 
+
+    def test_total_latency_budget_skips_second_provider_when_time_is_exhausted(self):
+        with patch.dict(os.environ, {
+            "CLOUDFLARE_ACCOUNT_ID": "account-test",
+            "CLOUDFLARE_API_TOKEN": "cf-test-secret",
+            "ALEXA_LOCAL_MODEL_URL": "http://127.0.0.1:8080/v1",
+        }, clear=False), patch(
+            "model_runtime.time.monotonic", side_effect=[0.0, 0.0, 9.5]
+        ), patch("model_runtime._cloudflare_generate", return_value=None), patch(
+            "model_runtime._local_generate", return_value="should not run"
+        ) as local:
+            self.assertIsNone(model_runtime.generate("hello", []))
+        local.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
