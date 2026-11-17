@@ -6,8 +6,8 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_TIMEOUT = 35
-MAX_CONTEXT_MESSAGES = 20
-MAX_MESSAGE_CHARS = 6000
+MAX_CONTEXT_MESSAGES = 10
+MAX_MESSAGE_CHARS = 1800
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
@@ -92,7 +92,7 @@ def _cloudflare_generate(messages):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 1600,
+        "max_completion_tokens": 512,
         "temperature": 0.7,
         "reasoning_effort": None,
         "chat_template_kwargs": {
