@@ -240,11 +240,11 @@ def response_for(message, history):
         if value is not None:
             if lang == "en": return "The answer is " + str(value) + "."
             if lang == "hi": return "Iska jawab " + str(value) + " hai."
-            if lang == "pa": return "Isda jawab " + str(value) + " aa.""
+            if lang == "pa": return "Isda jawab " + str(value) + " aa."
             return "Iska jawab " + str(value) + " hai."
     if re.search(r"\b(good morning|subah|subha|morning)\b", t):
         return "Good morning! Aaj ka din kaisa ja raha hai?" if lang != "en" else "Good morning! How's your day going?"
-    if re.search(r"\b(hello|hi|hii+|hey|heyy+|salam|salaam|aoa|sat sri akal|satsriakal|ki haal)\b", t):
+    if re.search(r"\b(hello|hi|hii+|hey|heyy+|salam|salaam|assalam|aslam|namaste|namaskar|hailo|aoa|sat sri akal|satsriakal|ki haal)\b", t):
         return r["hello"]
     if re.search(r"\b(how are you|how r u|kaise ho|kaise hain|kaisay ho|kese ho|kese hain|kya haal|ki haal|kida|kidda|ap kise hin|aap kaise hain)\b", t):
         return r["how"]
