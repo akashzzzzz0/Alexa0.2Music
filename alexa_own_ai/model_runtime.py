@@ -112,12 +112,36 @@ def _cloudflare_generate(messages):
         data = result.get("result", result)
         answer = data.get("response") if isinstance(data, dict) else None
         if not isinstance(answer, str) and isinstance(data, dict):
+            answer = data.get("output_text")
+        if not isinstance(answer, str) and isinstance(data, dict):
             choices = data.get("choices", [])
-            if choices and isinstance(choices[0], dict):
-                answer = choices[0].get("message", {}).get("content")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                choice = choices[0]
+                message = choice.get("message")
+                if isinstance(message, dict):
+                    answer = message.get("content")
+                    if not isinstance(answer, str):
+                        answer = message.get("text")
+                if not isinstance(answer, str):
+                    answer = choice.get("text")
+                if isinstance(answer, list):
+                    answer = "".join(
+                        part.get("text", "") for part in answer
+                        if isinstance(part, dict) and isinstance(part.get("text"), str)
+                    )
         answer = answer.strip() if isinstance(answer, str) else ""
         if not answer:
-            print("Cloudflare Workers AI response had no recognized text. Result keys:", list(data.keys()) if isinstance(data, dict) else type(data).__name__, flush=True)
+            choices = data.get("choices", []) if isinstance(data, dict) else []
+            first = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+            message = first.get("message") if isinstance(first.get("message"), dict) else {}
+            print(
+                "Cloudflare Workers AI response had no text. Result keys:",
+                list(data.keys()) if isinstance(data, dict) else type(data).__name__,
+                "choice keys:", list(first.keys()),
+                "message keys:", list(message.keys()),
+                "finish_reason:", first.get("finish_reason"),
+                flush=True,
+            )
             return None
         return answer[:8000]
     except urllib.error.HTTPError as exc:
