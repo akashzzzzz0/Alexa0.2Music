@@ -67,6 +67,22 @@ def respond(message, normalized, language, history, context=None):
     prev = last_assistant.lower()
     words = set(t.split())
 
+    # Acknowledge reciprocal wishes instead of repeating the original sign-off.
+    # Only trigger when Alexa's immediately preceding turn actually contained a wish.
+    reciprocal_wish = re.fullmatch(
+        r"(same\\s+to\\s+you|you\\s+too|likewise|tumhe\\s+bhi|tumhein\\s+bhi|"
+        r"tumko\\s+bhi|aapko\\s+bhi|apko\\s+bhi|tum\\s+bhi|aap\\s+bhi)"
+        r"(\\s+alexa)?[!. ]*",
+        t,
+    )
+    previous_wish = re.search(
+        r"\\b(good\\s*night|sleep\\s+well|sweet\\s+dreams|peaceful\\s+sleep|"
+        r"take\\s+care|aaram\\s+se\\s+sona|khayal\\s+rakhna)\\b",
+        prev,
+    )
+    if reciprocal_wish and previous_wish:
+        return "Aww, thank you! 😊" if language == "en" else "Aww, shukriya! 😊"
+
     # Farewells are complete conversational acts, not ambiguous short replies.
     # Recognize combined good-night / tomorrow messages before generic follow-up
     # handling so the model cannot turn a clear sign-off into a clarification loop.
