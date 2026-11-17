@@ -36,3 +36,8 @@ suitable for testing on a 256 MB class plan, subject to the host's own limits.
 This does not remove third-party AI quotas or guarantee uptime. A full generative
 model needs substantially more memory. Keep Groq/Gemini/other configured providers
 for open-ended answers and use this service only as a lightweight offline fallback.
+
+
+## Download the ZIP
+
+This folder is packaged automatically by the public GitHub Actions workflow named **Build Alexa Own AI ZIP**. Open the repository's **Actions** tab, choose the latest successful run, and download the `alexa-own-ai` artifact. The source folder itself is also public in this repository.
