@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from alexa_own_ai import app
 
@@ -71,7 +72,7 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
             {"role": "user", "content": "Bohat buri baat hai"},
             {"role": "assistant", "content": "Kya hua? Izzat lagna shuru ho gayi?"},
         ]
-        with unittest.mock.patch.object(app, "local_model_generate", return_value="Kya hua? Kis baat par keh rahe ho?") as model:
+        with mock.patch.object(app, "local_model_generate", return_value="Kya hua? Kis baat par keh rahe ho?") as model:
             reply = app.response_for("Mtlb?", history)
         self.assertEqual(reply, "Kya hua? Kis baat par keh rahe ho?")
         model.assert_called_once()
