@@ -168,6 +168,38 @@ class ModelRuntimeTests(unittest.TestCase):
         self.assertIn("warm_or_appreciative", cues)
         self.assertIn("heuristic cues, not certainties", cues)
 
+    def test_whole_message_analysis_detects_request_negation_and_contextual_constraints(self):
+        cues = model_runtime.deep_understanding.analyze(
+            "Nahi, pehle wala mat badalna. Sirf reply samajhne ka system improve karo.",
+            [{"role": "assistant", "content": "Should I update the whole project?"}],
+        )
+        self.assertIn("message_act=correction_or_disagreement", cues)
+        self.assertIn("contains_negation=yes", cues)
+        self.assertIn("contains_possible_correction=yes", cues)
+
+    def test_roman_urdu_multi_part_request_is_classified_as_request(self):
+        cues = model_runtime.deep_understanding.analyze(
+            "Mujhe ye kaam kar do, aur pehle se chalne wale features ko mat badalna.", []
+        )
+        self.assertIn("message_act=request", cues)
+        self.assertIn("contains_request=yes", cues)
+        self.assertIn("contains_negation=yes", cues)
+
+    def test_urdu_and_devanagari_messages_are_counted_as_words(self):
+        urdu = model_runtime.deep_understanding.analyze("آپ میری بات سمجھ رہے ہیں؟", [])
+        hindi = model_runtime.deep_understanding.analyze("तुम मेरी बात समझ रहे हो?", [])
+        self.assertIn("script_hint=urdu_or_arabic_script", urdu)
+        self.assertIn("script_hint=devanagari_script", hindi)
+        self.assertIn("word_count=6", urdu)
+        self.assertIn("word_count=6", hindi)
+
+    def test_prompt_requires_full_message_clause_and_constraint_handling(self):
+        prompt = model_runtime._messages("Do this, but don't change anything else.", [])[0]["content"].lower()
+        self.assertIn("every separate request or question", prompt)
+        self.assertIn("conditions, negation, contrast", prompt)
+        self.assertIn("preserve the earlier constraints", prompt)
+        self.assertIn("do not answer only the first or last clause", prompt)
+
     def test_model_prompt_includes_deep_understanding_without_extra_turn(self):
         messages = model_runtime._messages(
             "Nahi, mera matlab kuch aur tha",

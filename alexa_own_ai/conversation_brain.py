@@ -97,6 +97,16 @@ def respond(message, normalized, language, history, context=None):
         return ("I don't live in a physical city or country; I'm a virtual assistant." if not roman
                 else "Main kisi physical shehar ya desh mein nahi rehti; main ek virtual assistant hoon. 😊")
 
+    # Let the generative model handle genuinely multi-part messages. A local
+    # phrase match must not swallow the rest of a longer request or a second question.
+    clause_words = re.findall(
+        r"\b(aur|or|and|but|lekin|magar|also|plus|phir|saath)\b", t
+    )
+    clause_count = len(re.findall(r"\w+", t, flags=re.UNICODE))
+    has_sentence_break = bool(re.search(r"[,;.!?؟]", str(message or "")))
+    if clause_count >= 7 and (clause_words or has_sentence_break):
+        return None
+
     # Calls and greetings should sound like natural chat, not a clarification.
     if re.search(r"\b(alexa\s+)?(baby|babu)\b", t):
         return "Haan bolo, kya baat hai? 😊" if roman else "Hey, what's up?"
