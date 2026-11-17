@@ -23,5 +23,7 @@ jobs:
           python-version: "3.12"
       - name: Compile service modules
         run: python -m py_compile app.py bootstrap.py ai_router.py conversation_brain.py deep_understanding.py context_envelope.py model_runtime.py
-      - name: Run regression tests
+      - name: Run service regression tests
         run: python -m unittest discover -v
+      - name: Run repository integration tests
+        run: PYTHONPATH=.. python -m unittest discover -s ../tests -v
