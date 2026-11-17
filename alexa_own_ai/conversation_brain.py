@@ -97,6 +97,28 @@ def respond(message, normalized, language, history, context=None):
         return ("I don't live in a physical city or country; I'm a virtual assistant." if not roman
                 else "Main kisi physical shehar ya desh mein nahi rehti; main ek virtual assistant hoon. 😊")
 
+    # Ranking questions need evidence from the conversation or caller context.
+    # Never guess that Alexa (or any member) is No. 1 when no ranking data exists.
+    ranking_question = bool(re.search(
+        r"\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b.{0,32}\\b(?:kon|kaun|who|hai|is)\\b|"
+        r"\\b(?:who|kon|kaun)\\b.{0,32}\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b",
+        str(message or "").casefold(),
+    ))
+    if ranking_question:
+        evidence = " ".join(
+            str(item.get("content", "")) for item in (history or [])
+            if isinstance(item, dict)
+        ) + " " + str(context or "")
+        has_ranking_evidence = bool(re.search(
+            r"\\b(leaderboard|ranking|rank|position|top\\s*player|score|points|kills|coins|level)\\b|"
+            r"(?:\\bno\\.?\\s*1\\b|\\bnumber\\s*1\\b|\\b#\\s*1\\b)",
+            evidence.casefold(),
+        ))
+        if not has_ranking_evidence:
+            return ("No. 1 in which context—the group leaderboard, a game ranking, or something else?"
+                    if not roman else
+                    "Kis cheez mein No. 1? Group leaderboard, game ranking, ya kisi aur baat mein? 😊")
+
     # Acknowledge a user's explicit conversational statement that they are
     # Alexa's owner. This is dialogue context only, never authentication for
     # privileged actions or account access.
