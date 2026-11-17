@@ -239,18 +239,18 @@ def response_for(message, history):
     if not t:
         return r["hello"]
     # Common speech-to-text and casual Roman Urdu spellings for "speak / go ahead".
-    if re.fullmatch(r"(?:bool|bol|bo+l+)\\s*(?:ly+|le|na|do)?", t) or t in {"bolo", "bolo na", "bol na", "bolly", "bollyy", "suno", "sun na", "sunn"}:
+    if re.fullmatch(r"(?:bool|bol|bo+l+)\s*(?:ly+|le|na|do)?", t) or t in {"bolo", "bolo na", "bol na", "bolly", "bollyy", "suno", "sun na", "sunn"}:
         if lang == "en":
             return "I'm listening. Go ahead—what did you want to say?"
         if lang == "pa":
             return "Haanji, dasso! Main sun rahi aan."
         return "Haan ji, bolo! Main sun rahi hoon."
     # A greeting plus Alexa's name or a casual call should be treated as a direct greeting.
-    if re.search(r"\\b(alexa|oye|oy+|hello|hi|hey|baby)\\b", t) and re.search(r"\\b(alexa|oye|oy+|hello|hi|hey)\\b", t):
+    if re.search(r"\b(alexa|oye|oy+|hello|hi|hey|baby)\b", t) and re.search(r"\b(alexa|oye|oy+|hello|hi|hey)\b", t):
         if lang == "en":
             return "Hey! I'm here. What's up?"
         return "Oyyyy! Haan bolo, sun rahi hoon."
-    if re.search(r"\\b(suno|sun na|listen|listen up)\\b", t):
+    if re.search(r"\b(suno|sun na|listen|listen up)\b", t):
         if lang == "en":
             return "I'm listening. What's up?"
         return "Haan ji, sun rahi hoon. Bolo?"
