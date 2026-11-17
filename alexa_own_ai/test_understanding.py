@@ -7,19 +7,19 @@ from model_runtime import _messages
 
 
 class UnderstandingRoutingTests(unittest.TestCase):
-    @patch("app.local_model_generate", return_value="I read that as playful laughter 😄")
+    @patch("app.conversation_respond", return_value="I read that as playful laughter 😄")
     def test_emoji_only_message_reaches_model(self, generate):
         reply = app.response_for("😂", [{"role": "user", "content": "That was funny"}])
         self.assertEqual(reply, "I read that as playful laughter 😄")
-        generate.assert_called_once_with("😂", [{"role": "user", "content": "That was funny"}])
+        generate.assert_called_once_with("😂", "😂", "ur", [{"role": "user", "content": "That was funny"}])
 
-    @patch("app.local_model_generate", return_value="You sound disappointed about what happened.")
+    @patch("app.conversation_respond", return_value="You sound disappointed about what happened.")
     def test_open_ended_message_is_understood_before_keyword_rules(self, generate):
         reply = app.response_for("Yaar kal jo hua na, woh bilkul acha nahi laga.", [])
         self.assertEqual(reply, "You sound disappointed about what happened.")
         generate.assert_called_once()
 
-    @patch("app.local_model_generate", return_value="wrong model arithmetic")
+    @patch("app.conversation_respond", return_value="wrong model arithmetic")
     def test_arithmetic_stays_on_exact_local_calculator(self, generate):
         reply = app.response_for("2 + 2", [])
         self.assertIn("4", reply)
