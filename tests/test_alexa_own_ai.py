@@ -27,6 +27,11 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
     def test_roman_hindi_detection(self):
         self.assertEqual(app.detect_language("Tum kya kar rahe ho?"), "hi")
 
+    def test_urdu_question_is_transliterated_and_answered_in_roman(self):
+        reply = app.response_for("آپ کیسے ہیں؟", [])
+        self.assertIn("Main theek hoon", reply)
+        self.assertFalse(any("\\u0600" <= ch <= "\\u06ff" for ch in reply))
+
 
 class AlexaOwnAIMemoryTests(unittest.TestCase):
     def setUp(self):
