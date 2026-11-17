@@ -23,6 +23,28 @@ factual, technical, current-events, or open-ended questions. Its transliteration
 and language detection are lightweight approximations, not full linguistic
 models. It should ask for clarification or be honest when it does not know.
 
+## Self-hosted generative model (optional)
+
+To enable genuine generative responses without Gemini/Groq or another third-party
+AI provider, run an OpenAI-compatible inference server that you own/control
+(for example, a local model server on your own device or private server), then
+configure these environment variables on this service:
+
+- `ALEXA_LOCAL_MODEL_URL`: base URL, `/v1`, or full
+  `/v1/chat/completions` endpoint for your self-hosted inference server.
+- `ALEXA_LOCAL_MODEL_NAME`: model identifier expected by that server (default
+  `local-model`).
+- `ALEXA_LOCAL_MODEL_TOKEN`: optional bearer token for a protected endpoint.
+- `ALEXA_LOCAL_MODEL_TIMEOUT`: request timeout in seconds (default 35; capped at 90).
+
+The adapter sends the recent conversation context and a multilingual Alexa
+system prompt. Only `user` and `assistant` history roles are forwarded. If the
+model endpoint is unset or unreachable, the existing offline engine answers
+instead. The adapter itself does not download model weights or create a hosted
+model: the inference server and its compute must be supplied separately. Do not
+expose a phone/server inference port publicly without authentication and a
+secure private connection.
+
 ## API
 
 - `GET /health`

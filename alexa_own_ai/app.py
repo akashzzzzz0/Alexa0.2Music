@@ -27,6 +27,11 @@ try:
 except ImportError:  # support direct execution: python app.py
     from conversation_brain import respond as conversation_respond
 
+try:
+    from .model_runtime import generate as local_model_generate
+except ImportError:
+    from model_runtime import generate as local_model_generate
+
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
@@ -238,6 +243,12 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
+
+    # Prefer the operator-owned generative model when one is configured.
+    # The lightweight dialogue engine remains the offline fallback.
+    model_reply = local_model_generate(raw, history)
+    if model_reply:
+        return model_reply
 
     # Dedicated dialogue layer handles everyday conversation and contextual follow-ups.
     brain_reply = conversation_respond(raw, t, lang, history)
