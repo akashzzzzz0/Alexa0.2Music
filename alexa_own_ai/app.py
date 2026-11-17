@@ -33,6 +33,11 @@ try:
 except ImportError:
     from model_runtime import generate as local_model_generate, status as model_runtime_status
 
+try:
+    from .context_envelope import normalize_context
+except ImportError:
+    from context_envelope import normalize_context
+
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
@@ -243,7 +248,7 @@ def save_turns(conversation, user_text, reply):
             conn.execute("INSERT INTO turns(conversation, role, content, created_at) VALUES(?,?,?,?)", (conversation, "assistant", reply[:4000], dt.datetime.now(dt.timezone.utc).isoformat()))
             conn.execute("DELETE FROM turns WHERE conversation=? AND seq NOT IN (SELECT seq FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?)", (conversation, conversation, MAX_HISTORY))
 
-def response_for(message, history):
+def response_for(message, history, context=None):
     raw = str(message or "").strip()
     lang = detect_language(raw)
     t = normalize(raw)
@@ -258,7 +263,7 @@ def response_for(message, history):
 
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
-    brain_reply = conversation_respond(raw, t or raw, lang, history)
+    brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
 
@@ -430,8 +435,9 @@ class Handler(BaseHTTPRequestHandler):
             supplied = body.get("history", [])
             if not isinstance(supplied, list): supplied = []
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
+            context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
             history = get_history(conversation, supplied, message)
-            reply = response_for(message, history)
+            reply = response_for(message, history, context=context)
             save_turns(conversation, message, reply)
             model_status = model_runtime_status()
             return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
@@ -445,8 +451,9 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
+        context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
         history = get_history(conversation, messages, message)
-        reply = response_for(message, history) or REPLIES[detect_language(message)]["unknown"]
+        reply = response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
         # Always return a non-empty assistant message as a completed turn.
         save_turns(conversation, message, reply)
         return self.send_json(200, {
