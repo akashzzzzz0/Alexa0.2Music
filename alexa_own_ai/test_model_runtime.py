@@ -93,6 +93,23 @@ class ModelRuntimeTests(unittest.TestCase):
                 self.assertIsNone(model_runtime.generate("hello", []))
 
 
+    def test_ai_building_statement_does_not_trigger_unsolicited_identity_or_vision_claim(self):
+        message = "Ek AI main bhi bana ke dikhaunga"
+        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+            message, "Haan main bhi AI hoon, ab mujhe dekh sakti ho."
+        ))
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
+            message, "Achha! Phir dekhte hain tumhari AI kya kamaal karti hai 😄"
+        ))
+
+    def test_identity_and_visual_claim_are_allowed_when_directly_requested(self):
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
+            "Tum kon ho?", "Main Alexa hoon, ek AI assistant."
+        ))
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
+            "Kya tum mujhe dekh sakti ho?", "Nahi, mujhe yahan koi live visual nahi dikh raha."
+        ))
+
     def test_total_latency_budget_skips_second_provider_when_time_is_exhausted(self):
         with patch.dict(os.environ, {
             "CLOUDFLARE_ACCOUNT_ID": "account-test",
