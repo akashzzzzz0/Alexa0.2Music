@@ -33,6 +33,25 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
         self.assertFalse(any("\\u0600" <= ch <= "\\u06ff" for ch in reply))
 
 
+    def test_common_alexa_calls_and_roman_urdu_variants_always_get_replies(self):
+        examples = {
+            "Hello Alexa baby": ("Hey", "What's up"),
+            "Oyy Alexa baby": ("Haan bolo", "Oyyyy"),
+            "Bool lyy": ("bolo", "sun rahi"),
+            "Bol le": ("bolo", "sun rahi"),
+            "Suno Alexa": ("sun rahi", "listening"),
+        }
+        for message, expected_parts in examples.items():
+            with self.subTest(message=message):
+                reply = app.response_for(message, [])
+                self.assertTrue(reply.strip())
+                self.assertTrue(any(part.casefold() in reply.casefold() for part in expected_parts), reply)
+
+    def test_unknown_message_gets_a_nonempty_clarification(self):
+        for message in ("Aaj kuch ajeeb hua", "Tell me something unusual", "Mujhe samajh nahi aa raha"):
+            with self.subTest(message=message):
+                self.assertTrue(app.response_for(message, []).strip())
+
 class AlexaOwnAIMemoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
