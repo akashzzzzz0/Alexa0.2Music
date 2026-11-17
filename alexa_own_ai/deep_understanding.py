@@ -87,8 +87,8 @@ def analyze(message, history):
     ))
     correction = correction or owner_assertion
     ranking_question = bool(re.search(
-        r"\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b.{0,32}\\b(?:kon|kaun|who|hai|is)\\b|"
-        r"\\b(?:who|kon|kaun)\\b.{0,32}\\b(?:no\\.?\\s*1|number\\s*1|#\\s*1|top\\s*1|rank\\s*1)\\b",
+        r"\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b.{0,32}\b(?:kon|kaun|who|hai|is)\b|"
+        r"\b(?:who|kon|kaun)\b.{0,32}\b(?:no\.?\s*(?:1|one)|number\s*(?:1|one)|#\s*1|top\s*1|rank\s*1)\b",
         text,
     ))
     question = "?" in raw or "؟" in raw or bool(re.search(_QUESTION, text))
