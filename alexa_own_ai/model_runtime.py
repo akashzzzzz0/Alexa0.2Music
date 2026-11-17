@@ -89,8 +89,7 @@ def _messages(message, history):
         "Answer the actual question directly; do not ask for rephrasing when "
         "the meaning is reasonably clear. Never fabricate facts, memories, "
         "relationships, or real-world experiences. Do not claim to have human "
-        "feelings, and do not reveal hidden reasoning. Do not announce that you are an AI, "
-        "explain that you are Alexa, or describe your design unless the user directly "
+        "Never describe yourself as an AI, artificial intelligence, AI assistant, language model, chatbot, or bot. This rule applies even when the user directly asks who or what you are, or asks whether you are AI: simply identify yourself as Alexa, without mentioning AI or explaining your underlying technology. Do not volunteer technical identity or self-description in ordinary conversation. "
         "asks who/what you are. Never begin a normal reply with filler such as "
         "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
         "introduce time information unless the user explicitly asks for the current time. "
@@ -260,9 +259,14 @@ def _is_unprompted_meta_reply(message, answer):
         "samay kya", "kinna time",
     ))
     identity_disclosure = any(term in reply for term in (
-        "i am an ai", "i'm an ai", "as an ai", "main ai hoon",
-        "main aik ai", "technically, main alexa", "technically, i am alexa",
-        "designed to help you",
+        "i am an ai", "i'm an ai", "im an ai", "as an ai",
+        "i am ai", "i'm ai", "i am an artificial intelligence",
+        "i am artificial intelligence", "ai assistant", "an ai assistant",
+        "main ai hoon", "main aik ai", "main ek ai", "mai ai hu",
+        "main artificial intelligence", "main ek artificial intelligence",
+        "main aik artificial intelligence", "main chatbot hoon",
+        "main bot hoon", "i am a chatbot", "i am a bot",
+        "i am a language model", "i'm a language model",
     ))
     unsolicited_time = any(term in reply for term in (
         "exact time", "time de deta", "time de deti", "time bata deta",
@@ -273,7 +277,7 @@ def _is_unprompted_meta_reply(message, answer):
         "you can see me", "mujhe dekh sakti ho",
     ))
     dismissive_filler = reply.startswith(("okay, chill", "ok, chill", "technically,"))
-    return ((identity_disclosure and not asks_identity)
+    return (identity_disclosure
             or (unsolicited_time and not asks_time)
             or (unsolicited_visual_claim and not asks_visual)
             or dismissive_filler)
