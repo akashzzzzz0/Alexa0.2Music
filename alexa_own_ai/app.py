@@ -298,6 +298,31 @@ def get_memory_items(scope):
     return {key: value for key, value in rows}
 
 
+def request_context(body, default_scope):
+    """Combine verified saved memory with request-scoped facts for one reply."""
+    scope = _memory_scope(body.get("memory_scope") or default_scope)
+    memory_result = save_memory_items(
+        scope,
+        updates=body.get("memory_updates"),
+        forget_keys=body.get("forget_memory_keys"),
+        forget_all=body.get("forget_all_memory") is True,
+    )
+    saved = get_memory_items(scope)
+    request_memory = body.get("memory_context")
+    if saved:
+        memory_payload = {"saved_memory": saved}
+        if isinstance(request_memory, (dict, list, tuple)) and request_memory:
+            memory_payload["request_memory"] = request_memory
+        elif isinstance(request_memory, str) and request_memory.strip():
+            memory_payload["request_memory"] = request_memory.strip()[:MAX_MEMORY_VALUE_CHARS]
+    else:
+        memory_payload = request_memory
+    context = normalize_context(
+        body.get("context"), memory_payload, body.get("media_context")
+    )
+    return context, memory_result, len(saved)
+
+
 def get_history(conversation, supplied, current_message=""):
     supplied_messages = [x for x in supplied if isinstance(x, dict)]
     if supplied_messages and supplied_messages[-1].get("role") == "user" and str(supplied_messages[-1].get("content", "")) == str(current_message):
@@ -488,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?", 1)[0].rstrip("*") == "/health":
             model_status = model_runtime_status()
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_recent_20+scoped_long_term"})
         return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
@@ -511,12 +536,12 @@ class Handler(BaseHTTPRequestHandler):
             supplied = body.get("history", [])
             if not isinstance(supplied, list): supplied = []
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-            context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
+            context, memory_change, memory_items = request_context(body, conversation)
             history = get_history(conversation, supplied, message)
             reply = response_for(message, history, context=context)
             save_turns(conversation, message, reply)
             model_status = model_runtime_status()
-            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
+            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2), "memory_items": memory_items, "memory_saved": memory_change["saved"], "memory_deleted": memory_change["deleted"]})
 
         messages = body.get("messages", [])
         if not isinstance(messages, list): messages = []
@@ -527,14 +552,15 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-        context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
+        context, memory_change, memory_items = request_context(body, conversation)
         history = get_history(conversation, messages, message)
         reply = response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
         # Always return a non-empty assistant message as a completed turn.
         save_turns(conversation, message, reply)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro-v2", "object": "chat.completion",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}]
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}],
+            "x_alexa_memory": {"items": memory_items, "saved": memory_change["saved"], "deleted": memory_change["deleted"]}
         })
 
     def log_message(self, fmt, *args):
