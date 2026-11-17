@@ -94,6 +94,25 @@ supported model payload or a trustworthy description/transcript. The default
 text chat endpoint does not independently download or interpret Telegram
 stickers, images, GIFs, or voice files.
 
+### Conversation intelligence, feedback, and response decisions
+
+- The model prompt now receives a bounded, transient summary of recent turns,
+  cautious reference/correction cues, and a consistent Alexa voice profile.
+- The feedback API accepts an optional `feedback` object such as
+  `{"category":"repetitive","sentiment":"negative"}`. Categories are
+  allowlisted; only category, sentiment, scope, and timestamp are stored.
+  Raw message text is never stored as feedback. Repeated explicit feedback
+  can add guidance to future prompts; this is preference aggregation, not
+  model fine-tuning or autonomous code changes.
+- The caller may pass `decision_context` with `is_group`, `addressed`,
+  `mentioned`, `replied_to`, and `allow_reactions` booleans. The response
+  includes a decision recommendation: `reply`, `react`, or `silence`.
+  Reactions are disabled unless the caller explicitly enables them.
+- Decision metadata is advisory. The Telegram integration must honor it to
+  suppress a reply or apply a reaction; this service does not send Telegram
+  messages or reactions itself. Without group context, the API defaults to
+  recommending a reply.
+
 ## Security and deployment
 
 - Set `ALEXA_AI_TOKEN` in EthioDeploy and send it as a Bearer token on POST
