@@ -92,8 +92,12 @@ def _cloudflare_generate(messages):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_tokens": 500,
+        "max_completion_tokens": 800,
         "temperature": 0.7,
+        "chat_template_kwargs": {
+            "enable_thinking": False,
+            "clear_thinking": True,
+        },
     }).encode("utf-8")
     request = urllib.request.Request(
         url, data=payload,
