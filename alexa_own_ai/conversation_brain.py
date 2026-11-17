@@ -63,6 +63,11 @@ def respond(message, normalized, language, history):
     prev = last_assistant.lower()
     words = set(t.split())
 
+    # Preserve the exact real-world conversation that exposed the repeated fallback.
+    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
+        return ("Yes, all good here. I was right here—how are you?" if not roman
+                else "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?")
+
     # Conversational repair: understand why the user is asking for clarification.
     if re.search(r"\b(kya matlab|matlab kya|what do you mean|meaning kya|kis liye|kyun poocha|why ask)\b", t):
         return bank["meaning"]
@@ -70,7 +75,8 @@ def respond(message, normalized, language, history):
         return bank["repeat"]
     if re.search(r"\b(kis|kaun|kon)\b", t) and re.search(r"\b(alfaz|lafz|ilfaz|word|words|tarah)\b", t) and re.search(r"\b(samj|samajh)\w*\b", t):
         if any(k in prev for k in ("rephrase", "doosre", "context", "samajh", "clarify")):
-            return bank["meaning"]
+            return ("My mistake—I understood you the first time. I shouldn't have asked you to rephrase." if not roman
+                    else "Arey, meri galti! Tumhari pehli baat samajh aa gayi thi—mujhe dobara poochna nahi chahiye tha.")
         return bank["ask_clarify"]
 
     # Replies that depend on the last assistant turn, not just keywords.
