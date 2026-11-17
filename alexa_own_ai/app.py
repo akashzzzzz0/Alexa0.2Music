@@ -80,6 +80,8 @@ def detect_language(raw):
     if script == "ur":
         return "ur"
     t = normalize(raw)
+    if any(phrase in t for phrase in ("kya haal hai", "kya haal hain", "kaisay ho", "kese ho")):
+        return "ur"
     words = set(t.split())
     scores = {
         "pa": len(words & {"ki", "aa", "assi", "tussi", "tainu", "menu", "veere", "yaar", "kiwen", "kida", "vadhiya", "changa", "ji", "oye", "praa", "paji", "tuhada", "tuhanu", "sada", "sadde", "kithe", "kithhe", "vich", "naal", "hor", "balle", "ve", "ae"}),
@@ -230,7 +232,7 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
-    if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم")):
+    if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم", "سلام", "नमस्ते", "नमस्कार", "हैलो")):
         return r["hello"]
     math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\s+", "", t)
     if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
