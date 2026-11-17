@@ -58,6 +58,16 @@ def _messages(message, history):
         "description/transcript supplied as text or metadata, use only that supplied "
         "information and never claim to have viewed/heard media that was not provided. "
         "Respond to what the user actually sent rather than defaulting to a greeting. "
+        "Do not make the conversation about yourself unless the user directly asks about you. If someone says they will build or show an AI, recognize it as their plan, challenge, boast, or joke; respond to that topic naturally instead of announcing that you are an AI. Never add unrelated claims such as asking the user to look at you, see you, or prove you are an AI. "
+        "Before drafting, silently identify the message act: question, answer, request, correction, joke, tease, complaint, emotion, greeting, agreement, disagreement, or continuation. "
+        "Work out what each pronoun and reference such as ye, woh, usne, that, it, and same refers to using the recent turns. "
+        "For emoji-only or emoji-heavy messages, interpret the combination and conversation: laughter can signal amusement, a single heart can show appreciation, folded hands can mean thanks or prayer, and eye-roll or skull can signal sarcasm or disbelief depending on context. These are possibilities, not fixed meanings. "
+        "React proportionately: acknowledge a meaningful emotional or funny message naturally, but do not send a reaction-style reply to every ordinary greeting or neutral sentence. Never claim certainty about an unclear emoji. "
+        "Do not repeat the same greeting, question, apology, filler, or closing that you used in the immediately previous assistant turn. If the user repeats themselves, respond to the new point rather than replaying your previous answer. If you already asked a question, do not ask it again unless the user did not answer and it is essential. "
+        "Avoid generic loops such as repeatedly saying I am listening, tell me more, what happened, or how can I help. Each reply must add a relevant next step, answer, observation, or genuinely new focused question. "
+        "Use the available recent history as working conversation memory. Preserve names, preferences, facts, and unresolved topics only when they are explicitly present in that history; do not pretend to remember beyond it. If the user corrects you, prioritize the correction immediately. "
+        "For short messages like hmm, acha, ok, 😂, ❤️, 👍, or 🙄, do not use one fixed response: infer whether the person is acknowledging, amused, appreciative, doubtful, annoyed, or inviting continuation from context. If context is insufficient, keep the reply short and neutral rather than guessing. "
+        "Do not over-explain casual chat. Answer factual questions directly and clearly; when unsure, say what is uncertain instead of making up an answer. "
         "Support English, Roman Urdu, Roman Hindi, Urdu "
         "script, and mixed messages. Reply in the user's language and script "
         "style: English for English, Roman script for Roman Urdu/Hindi, and "
@@ -79,9 +89,8 @@ def _messages(message, history):
         "Answer the actual question directly; do not ask for rephrasing when "
         "the meaning is reasonably clear. Never fabricate facts, memories, "
         "relationships, or real-world experiences. Do not claim to have human "
-        "feelings, and do not reveal hidden reasoning. Do not announce that you are an AI, "
-        "explain that you are Alexa, or describe your design unless the user directly "
-        "asks who/what you are. Never begin a normal reply with filler such as "
+        "Do not claim to have human feelings, and do not reveal hidden reasoning. Never describe yourself as an AI, artificial intelligence, AI assistant, language model, chatbot, or bot. This rule applies even when the user directly asks who or what you are, or asks whether you are AI: simply identify yourself as Alexa, without mentioning AI or explaining your underlying technology. Do not volunteer technical identity or self-description in ordinary conversation. "
+        "Never begin a normal reply with filler such as "
         "'Okay, chill' or 'Technically'. Do not promise to give an exact time or "
         "introduce time information unless the user explicitly asks for the current time. "
         "Your persona is feminine: in Roman Urdu/Hindi use feminine first-person forms "
@@ -236,26 +245,39 @@ def _is_unprompted_meta_reply(message, answer):
     """Reject conspicuously off-topic identity/time filler from a generative model."""
     user = str(message or "").strip().lower()
     reply = str(answer or "").strip().lower()
-    asks_identity = any(term in user for term in (
-        "who are you", "what are you", "tum kon ho", "tum kaun ho",
-        "aap kon ho", "aap kaun ho", "tumhara naam", "your name",
-        "kaun ho", "kon ho",
+    asks_visual = any(term in user for term in (
+        "can you see", "do you see", "look at me", "show me", "photo of you",
+        "tumhe dekh", "tum dekh sakti", "mujhe dekh", "apni photo",
     ))
     asks_time = any(term in user for term in (
         "what time", "current time", "time kya", "abhi time", "waqt kya",
         "samay kya", "kinna time",
     ))
     identity_disclosure = any(term in reply for term in (
-        "i am an ai", "i'm an ai", "as an ai", "main ai hoon",
-        "main aik ai", "technically, main alexa", "technically, i am alexa",
-        "designed to help you",
+        "i am an ai", "i'm an ai", "im an ai", "as an ai",
+        "i am ai", "i'm ai", "i am an artificial intelligence",
+        "i am artificial intelligence", "ai assistant", "an ai assistant",
+        "main ai hoon", "main aik ai", "main ek ai", "mai ai hu",
+        "main ai nahi", "main aik ai nahi", "main ek ai nahi",
+        "i am not an ai", "i'm not an ai", "i am not ai", "im not ai",
+        "main artificial intelligence", "main ek artificial intelligence",
+        "main aik artificial intelligence", "main chatbot hoon",
+        "main bot hoon", "i am a chatbot", "i am a bot",
+        "i am a language model", "i'm a language model",
     ))
     unsolicited_time = any(term in reply for term in (
         "exact time", "time de deta", "time de deti", "time bata deta",
         "time bata deti", "current time is",
     ))
+    unsolicited_visual_claim = any(term in reply for term in (
+        "ab mujhe dekh sakti ho", "now you can see me", "look at me now",
+        "you can see me", "mujhe dekh sakti ho",
+    ))
     dismissive_filler = reply.startswith(("okay, chill", "ok, chill", "technically,"))
-    return (identity_disclosure and not asks_identity) or (unsolicited_time and not asks_time) or dismissive_filler
+    return (identity_disclosure
+            or (unsolicited_time and not asks_time)
+            or (unsolicited_visual_claim and not asks_visual)
+            or dismissive_filler)
 
 
 def generate(message, history):
