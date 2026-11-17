@@ -13,7 +13,7 @@ import os
 import re
 import sqlite3
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer\n\nfrom .conversation_brain import respond as conversation_respond
+from http.server import BaseHTTPRequestHandler, HTTPServer\n\ntry:\n    from .conversation_brain import respond as conversation_respond\nexcept ImportError:  # support running app.py from the service root\n    from conversation_brain import respond as conversation_respond
 
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
