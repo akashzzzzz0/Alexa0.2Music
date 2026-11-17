@@ -38,19 +38,19 @@ def _clean(value, depth=0):
 def normalize_context(context=None, memory_context=None, media_context=None):
     """Return a small JSON-safe context envelope, or None when empty."""
     envelope = {}
-    if isinstance(context, dict):
+    if isinstance(context, dict) and context:
         envelope["application_facts"] = _clean(context)
-    elif isinstance(context, (list, tuple)):
+    elif isinstance(context, (list, tuple)) and context:
         envelope["application_facts"] = _clean(context)
     elif isinstance(context, str) and context.strip():
         envelope["application_facts"] = context.strip()[:MAX_STRING_CHARS]
 
-    if isinstance(memory_context, (dict, list, tuple)):
+    if isinstance(memory_context, (dict, list, tuple)) and memory_context:
         envelope["relevant_memory"] = _clean(memory_context)
     elif isinstance(memory_context, str) and memory_context.strip():
         envelope["relevant_memory"] = memory_context.strip()[:MAX_STRING_CHARS]
 
-    if isinstance(media_context, (dict, list, tuple)):
+    if isinstance(media_context, (dict, list, tuple)) and media_context:
         envelope["media_descriptions_or_transcripts"] = _clean(media_context)
     elif isinstance(media_context, str) and media_context.strip():
         envelope["media_descriptions_or_transcripts"] = media_context.strip()[:MAX_STRING_CHARS]
@@ -60,7 +60,7 @@ def normalize_context(context=None, memory_context=None, media_context=None):
     encoded = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) > MAX_CONTEXT_CHARS:
         encoded = encoded[:MAX_CONTEXT_CHARS]
-        return {"truncated_context_json": encoded}
+        return {"truncated_context_excerpt": encoded[:2000]}
     return envelope
 
 
