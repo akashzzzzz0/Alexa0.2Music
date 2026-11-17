@@ -234,6 +234,8 @@ def response_for(message, history):
         return r["hello"]
     if any(mark in raw for mark in ("السلام علیکم", "السلام عليكم", "السلامعلیکم", "سلام", "नमस्ते", "नमस्कार", "हैलो")):
         return r["hello"]
+    if any(mark in raw for mark in ("آپ کیسے ہیں", "آپ کیسے ہو", "آپ کا حال")):
+        return r["how"]
     math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\s+", "", t)
     if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
         value = safe_math(math_text if math_text != t else raw)
