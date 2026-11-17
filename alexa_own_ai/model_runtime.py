@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_TIMEOUT = 12
-MAX_CONTEXT_MESSAGES = 6
+MAX_CONTEXT_MESSAGES = 12
 MAX_MESSAGE_CHARS = 1000
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
