@@ -101,13 +101,33 @@ class AlexaOwnAIMemoryTests(unittest.TestCase):
         app.DB_PATH = self.previous_db_path
         self.tmp.cleanup()
 
-    def test_memory_is_separate_and_limited_to_last_five_messages(self):
-        for index in range(4):
+    def test_memory_is_separate_and_limited_to_last_twenty_messages(self):
+        for index in range(12):
             app.save_turns("chat-a:user-1", f"user-{index}", f"assistant-{index}")
         history = app.get_history("chat-a:user-1", [])
-        self.assertEqual(len(history), 5)
-        self.assertEqual(history[-1]["content"], "assistant-3")
+        self.assertEqual(len(history), 20)
+        self.assertEqual(history[-1]["content"], "assistant-11")
         self.assertEqual(app.get_history("chat-b:user-1", []), [])
+
+    def test_dialogue_brain_handles_followups_and_natural_chat(self):
+        cases = [
+            ("Tum batao", "theek hoon"),
+            ("Kya matlab?", "normally baat karo"),
+            ("Kuch nahi", "aise hi baat karte hain"),
+            ("Tumhe kya lagta hai?", "sabse zaroori kya hai"),
+            ("Tum naraz ho?", "feelings nahi hoti"),
+        ]
+        for message, expected in cases:
+            with self.subTest(message=message):
+                self.assertIn(expected, app.response_for(message, []).lower())
+
+    def test_contextual_yes_and_continue(self):
+        history = [
+            {"role": "user", "content": "Aaj school mein ek interesting baat hui"},
+            {"role": "assistant", "content": "Achha, phir kya hua?"},
+        ]
+        self.assertIn("phir batao", app.response_for("Haan", history).lower())
+        self.assertIn("main sun rahi hoon", app.response_for("Aur", history).lower())
 
     def test_caller_history_restores_context_when_service_database_is_empty(self):
         supplied = [
