@@ -64,7 +64,7 @@ def respond(message, normalized, language, history):
     words = set(t.split())
 
     # Preserve the exact real-world conversation that exposed the repeated fallback.
-    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
+    if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return ("Yes, all good here. I was right here—how are you?" if not roman
                 else "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?")
 
@@ -108,7 +108,7 @@ def respond(message, normalized, language, history):
         return bank["ask_identity"]
     if re.search(r"\b(yaad hai|yaad hai kya|remember me|do you remember|what did i say)\b", t):
         return bank["ask_memory"]
-    if re.search(r"\b(tumhe kaisa lagta|tumhara kya khayal|what do you think|your opinion|kya sochti)\b", t):
+    if re.search(r"\b(tumhe kaisa lagta|tumhe kya lagta|tumhara kya khayal|what do you think|your opinion|kya sochti)\b", t):
         return bank["ask_opinion"]
     if re.search(r"\b(khush ho|naraz ho|bura laga|feelings|do you feel|are you happy|are you sad)\b", t):
         return bank["ask_feelings"]
