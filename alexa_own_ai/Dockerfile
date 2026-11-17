@@ -3,13 +3,14 @@ WORKDIR /app
 COPY app.py .
 COPY conversation_brain.py .
 COPY deep_understanding.py .
+COPY context_envelope.py .
 COPY model_runtime.py .
 COPY ai_router.py .
 COPY bootstrap.py .
 
 # Validate all runtime modules during image build, not after deployment.
-RUN python -m py_compile app.py conversation_brain.py deep_understanding.py model_runtime.py ai_router.py bootstrap.py \
-    && python -c "import conversation_brain, deep_understanding, model_runtime, ai_router; assert callable(ai_router.route_response)"
+RUN python -m py_compile app.py conversation_brain.py deep_understanding.py context_envelope.py model_runtime.py ai_router.py bootstrap.py \
+    && python -c "import conversation_brain, deep_understanding, context_envelope, model_runtime, ai_router; assert callable(ai_router.route_response)"
 
 ENV PORT=3000
 EXPOSE 3000
