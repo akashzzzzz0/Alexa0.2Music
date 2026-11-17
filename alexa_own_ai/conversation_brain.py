@@ -66,7 +66,7 @@ def respond(message, normalized, language, history):
     words = set(t.split())
 
     # Short, natural Roman Urdu small-talk and playful teasing.
-    if re.search(r"\\b(alexa\\s+)?(baby|babu)\\b", t):
+    if re.search(r"\b(alexa\s+)?(baby|babu)\b", t):
         return "Ji, bolo 😊" if roman else "Hey, go ahead."
     if re.fullmatch(r"(oye|suno|hello|hi)[!. ]*", t):
         return "Ji, bolo 😊" if roman else "Hey, go ahead."
@@ -74,6 +74,21 @@ def respond(message, normalized, language, history):
         return "Haan ji, bolo. Kya baat hai?" if roman else "Sure, what's up?"
     if re.search(r"\b(tum pagal ho|tu pagal hai|pagal ho tum|you are crazy|you're crazy)\b", t):
         return "Achha ji? Maine kya kar diya? 😄" if roman else "Oh really? What did I do? 😄"
+
+    # Natural, context-aware Roman Urdu chat patterns. Keep these ahead of the LLM
+    # so short everyday turns do not receive formal or unrelated generated replies.
+    if re.search(r"\\b(lag bhag|lagbhag|taqreeban|almost)\\b", t) and re.search(r"\\b(sahi|theek|thik)\\b", t) and re.search(r"\\b(chal|work|kaam)\\w*\\b", t):
+        return "Haan ji, ab kaafi behtar chal rahi hoon 😄" if roman else "Yes, things are working much better now. 😄"
+    if re.fullmatch(r"(or|aur) batao( alexa)?[!. ]*", t) or re.fullmatch(r"(or|aur) btao( alexa)?[!. ]*", t):
+        return "Tum sunao, aaj kya chal raha hai? Ya mujhse kuch bhi pooch lo 😊" if roman else "What's going on with you? Or ask me anything. 😊"
+    if re.search(r"\\b(jo bhi|jo b) (pata|pta) (hai|he) tumhe( wahi)?\\b", t):
+        return "Mujhe kaafi topics par baat karni aati hai—tech, games, duniya ki khabrein aur rozmarra ke sawal. Kis cheez par baat karein?" if roman else "I can chat about lots of topics, from tech and games to everyday questions. What interests you?"
+    if re.search(r"\\b(main|mai|me) to tum se (hi )?poochna chahta( hoon| hun| hu)?\\b", t) or re.search(r"\\b(i want to ask you)\\b", t):
+        return "Achha ji, phir poochho na 😄 Kya jaan'na hai?" if roman else "Oh, then ask away. What do you want to know?"
+    if re.fullmatch(r"(pakka|paka|sure|really) (bata(u|oon|on)|bta(u|oon|on)|tell you)[!. ]*", t) or re.search(r"\\b(pakka bata(u|oon|on)|pakka bta(u|oon|on)|pakka batau)\\b", t):
+        return "Haan bilkul, bolo na 😄" if roman else "Of course. Go ahead. 😄"
+    if re.fullmatch(r"(bolo|bol|batao|btao|haan bolo)[!. ]*", t):
+        return "Haan ji, bolo—sun rahi hoon 😊" if roman else "Go ahead, I'm listening. 😊"
 
     # Preserve the exact real-world conversation that exposed the repeated fallback.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
