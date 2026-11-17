@@ -10,9 +10,10 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
         self.assertEqual(app.detect_language("Hello, how are you?"), "en")
         self.assertIn("How", app.response_for("Hello", []))
 
-    def test_roman_punjabi_is_detected(self):
-        self.assertEqual(app.detect_language("Tussi ki haal aa veere?"), "pa")
-        self.assertIn("Oye", app.response_for("Ki haal aa?", []))
+    def test_roman_hindi_urdu_and_punjabi_style_share_roman_reply_mode(self):
+        self.assertEqual(app.detect_language("Tussi ki haal aa veere?"), "ur")
+        self.assertTrue(app.response_for("Ki haal aa?", []))
+        self.assertFalse(any("\u0600" <= ch <= "\u06ff" for ch in app.response_for("Ki haal aa?", [])))
 
     def test_devanagari_input_gets_roman_reply(self):
         self.assertEqual(app.detect_language("नमस्ते"), "hi")
@@ -25,12 +26,12 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
         self.assertFalse(any("\u0600" <= ch <= "\u06ff" for ch in reply))
 
     def test_roman_hindi_detection(self):
-        self.assertEqual(app.detect_language("Tum kya kar rahe ho?"), "hi")
+        self.assertEqual(app.detect_language("Tum kya kar rahe ho?"), "ur")
 
     def test_urdu_question_is_transliterated_and_answered_in_roman(self):
         reply = app.response_for("آپ کیسے ہیں؟", [])
         self.assertIn("Main theek hoon", reply)
-        self.assertFalse(any("\\u0600" <= ch <= "\\u06ff" for ch in reply))
+        self.assertFalse(any("\u0600" <= ch <= "\u06ff" for ch in reply))
 
 
     def test_common_alexa_calls_and_roman_urdu_variants_always_get_replies(self):
@@ -67,6 +68,28 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
         for message in ("Aaj kuch ajeeb hua", "Tell me something unusual", "Mujhe samajh nahi aa raha"):
             with self.subTest(message=message):
                 self.assertTrue(app.response_for(message, []).strip())
+
+    def test_requested_casual_conversation_is_understood_with_context(self):
+        first = "Ha sab Thek Chall Raha kha thii tum"
+        self.assertIn("tum sunao", app.response_for(first, []).lower())
+        history = [
+            {"role": "user", "content": first},
+            {"role": "assistant", "content": "Haan, main sun rahi hoon. Zara doosre alfaaz mein samjha do?"},
+        ]
+        second = app.response_for("Kis ilfaz me Samjhy ?", history)
+        self.assertIn("meri galti", second.lower())
+        history.extend([
+            {"role": "user", "content": "Kis ilfaz me Samjhy ?"},
+            {"role": "assistant", "content": second},
+        ])
+        self.assertIn("kya hua", app.response_for("Are yaar", history).lower())
+
+    def test_english_input_gets_english_and_roman_input_gets_roman(self):
+        self.assertEqual(app.detect_language("What are you doing today?"), "en")
+        self.assertIn("I'm", app.response_for("How are you?", []))
+        roman_reply = app.response_for("Tum kaisi ho?", [])
+        self.assertFalse(any("\u0600" <= ch <= "\u06ff" for ch in roman_reply))
+        self.assertFalse(any("\u0900" <= ch <= "\u097f" for ch in roman_reply))
 
 class AlexaOwnAIMemoryTests(unittest.TestCase):
     def setUp(self):
