@@ -1,0 +1,27 @@
+name: Alexa Own AI tests
+
+on:
+  push:
+    paths:
+      - "alexa_own_ai/**"
+      - ".github/workflows/own-ai-tests.yml"
+  pull_request:
+    paths:
+      - "alexa_own_ai/**"
+      - ".github/workflows/own-ai-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: alexa_own_ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile service modules
+        run: python -m py_compile app.py bootstrap.py ai_router.py conversation_brain.py model_runtime.py
+      - name: Run regression tests
+        run: python -m unittest discover -v
