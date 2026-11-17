@@ -256,7 +256,9 @@ def response_for(message, history):
     if not raw:
         return r["hello"]
 
-    brain_reply = conversation_respond(raw, t, lang, history)
+    # Keep emoji-only input intact for contextual dialogue matching; normalize()
+    # intentionally strips symbols for word-based intent rules.
+    brain_reply = conversation_respond(raw, t or raw, lang, history)
     if brain_reply:
         return brain_reply
 
