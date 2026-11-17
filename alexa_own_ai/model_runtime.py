@@ -6,6 +6,8 @@ import urllib.parse
 import urllib.request
 import time
 
+from alexa_own_ai import deep_understanding
+
 DEFAULT_TIMEOUT = 8
 MAX_TOTAL_INFERENCE_SECONDS = 10
 MAX_CONTEXT_MESSAGES = 14
@@ -110,6 +112,10 @@ def _messages(message, history):
         "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
     messages = [{"role": "system", "content": system_prompt}]
+    messages.append({
+        "role": "system",
+        "content": deep_understanding.analyze(message, history),
+    })
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
         if not isinstance(item, dict):
             continue
@@ -330,7 +336,7 @@ def generate(message, history):
     remaining = deadline - time.monotonic()
     if remaining >= 1.0 and os.getenv("ALEXA_LOCAL_MODEL_URL", "").strip():
         answer = _local_generate(message, history, timeout=min(_timeout(), remaining))
-        if answer and not _is_unprompted_meta_reply(message, answer):
+        if answer and not _is_unprompted_meta_reply(message, answer) and not _is_repeated_reply(history, answer):
             print("Alexa inference completed via self-hosted model in {:.2f}s.".format(time.monotonic() - started), flush=True)
             return answer
         if answer:
