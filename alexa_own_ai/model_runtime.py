@@ -114,11 +114,8 @@ def _messages(message, history):
         "For a simple call like 'oye suno' or 'baat sun', answer naturally and briefly, "
         "for example 'Haan bolo, kya baat hai?' Do not add unrelated explanations."
     )
+    system_prompt += "\\n\\n" + deep_understanding.analyze(message, history)
     messages = [{"role": "system", "content": system_prompt}]
-    messages.append({
-        "role": "system",
-        "content": deep_understanding.analyze(message, history),
-    })
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
         if not isinstance(item, dict):
             continue
