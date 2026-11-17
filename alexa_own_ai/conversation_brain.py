@@ -8,6 +8,7 @@ import re
 EN = {
     "greet_back": "Hey! I'm here. What's going on?",
     "how_back": "I'm doing well, thanks for asking. How has your day been?",
+    "day_back": "My day is going well, thanks for asking. How has yours been?",
     "thanks_back": "You're welcome. What else is on your mind?",
     "apology_back": "No worries. It's okay—what would you like to talk about?",
     "what_doing": "I'm here chatting with you. What are you up to?",
@@ -29,6 +30,7 @@ EN = {
 UR = {
     "greet_back": "Haan, yahin hoon. Kya chal raha hai?",
     "how_back": "Main theek hoon, poochne ka shukriya. Tumhara din kaisa ja raha hai?",
+    "day_back": "Mera din acha ja raha hai 😊 Tumhara din kaisa raha?",
     "thanks_back": "Koi baat nahi. Aur batao, kya chal raha hai?",
     "apology_back": "Koi baat nahi, sab theek hai. Ab kis bare mein baat karein?",
     "what_doing": "Bas yahin tumse chat kar rahi hoon. Tum kya kar rahe ho?",
@@ -98,6 +100,12 @@ def respond(message, normalized, language, history):
     if re.fullmatch(r"(kuch nahi|kuch bhi nahi|nothing|not much|bas aise hi|just like that)[!. ]*", t):
         return ("That's okay. We can chat casually. How has your day been?" if not roman
                 else "Koi baat nahi. Aise hi baat karte hain. Aaj din kaisa guzra?")
+
+    # Casual questions about Alexa's day (including common Roman Urdu spellings/typos).
+    if re.search(r"\b(how('?s| is) your day|how has your day been|how('s| is) your day going)\b", t):
+        return bank["day_back"]
+    if re.search(r"\b(tumhara|aapka|apka)?\s*din\b", t) and re.search(r"\b(kesa|kaisa|kaise|kese|kesaa)\b", t) and re.search(r"\b(ha|hai|he|raha|rahi|guzar|guzra|guzri|chal)\w*\b", t):
+        return bank["day_back"]
 
     # Common conversational intents and questions about Alexa.
     if re.search(r"\b(kaisi ho|kaise ho|kese ho|how are you|how r u|sab theek|sab thik|sab thek)\b", t):
