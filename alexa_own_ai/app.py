@@ -208,13 +208,19 @@ def memory_connection():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_seq ON turns(conversation, seq)")
     return conn
 
-def get_history(conversation, supplied):
-    if not conversation:
-        return [x for x in supplied if isinstance(x, dict)][-MAX_HISTORY:]
-    with DB_LOCK:
-        with memory_connection() as conn:
-            rows = conn.execute("SELECT role, content FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?", (conversation, MAX_HISTORY)).fetchall()
-    return [{"role": r, "content": c} for r, c in reversed(rows)]
+def get_history(conversation, supplied, current_message=""):
+    supplied_messages = [x for x in supplied if isinstance(x, dict)]
+    if supplied_messages and supplied_messages[-1].get("role") == "user" and str(supplied_messages[-1].get("content", "")) == str(current_message):
+        supplied_messages = supplied_messages[:-1]
+    if conversation:
+        with DB_LOCK:
+            with memory_connection() as conn:
+                rows = conn.execute("SELECT role, content FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?", (conversation, MAX_HISTORY)).fetchall()
+        if rows:
+            return [{"role": role, "content": content} for role, content in reversed(rows)]
+    # The bot caller also has its own persistent five-message history. Use it
+    # when the microservice database is new or was reset during a redeploy.
+    return supplied_messages[-MAX_HISTORY:]
 
 def save_turns(conversation, user_text, reply):
     if not conversation:
@@ -330,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
             supplied = body.get("history", [])
             if not isinstance(supplied, list): supplied = []
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-            history = get_history(conversation, supplied)
+            history = get_history(conversation, supplied, message)
             reply = response_for(message, history)
             save_turns(conversation, message, reply)
             return self.send_json(200, {"reply": reply, "fallback": False, "provider": "alexa-own-ai-micro", "is_llm": False, "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
@@ -344,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-        history = get_history(conversation, messages)
+        history = get_history(conversation, messages, message)
         reply = response_for(message, history)
         save_turns(conversation, message, reply)
         return self.send_json(200, {

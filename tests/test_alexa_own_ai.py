@@ -51,6 +51,17 @@ class AlexaOwnAIMemoryTests(unittest.TestCase):
         self.assertEqual(history[-1]["content"], "assistant-3")
         self.assertEqual(app.get_history("chat-b:user-1", []), [])
 
+    def test_caller_history_restores_context_when_service_database_is_empty(self):
+        supplied = [
+            {"role": "user", "content": "We were talking about a school project"},
+            {"role": "assistant", "content": "Right, the science project."},
+            {"role": "user", "content": "Why is it important?"},
+        ]
+        history = app.get_history("fresh-chat:user-2", supplied, "Why is it important?")
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[-1]["content"], "Right, the science project.")
+        self.assertNotEqual(history[-1]["content"], "Why is it important?")
+
 
 if __name__ == "__main__":
     unittest.main()
