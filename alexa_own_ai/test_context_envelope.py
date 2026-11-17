@@ -2,7 +2,9 @@
 import unittest
 from unittest.mock import patch
 
-from alexa_own_ai import ai_router, context_envelope, model_runtime
+import ai_router
+import context_envelope
+import model_runtime
 
 
 class ContextEnvelopeTests(unittest.TestCase):
