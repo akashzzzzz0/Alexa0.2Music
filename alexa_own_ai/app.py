@@ -13,13 +13,13 @@ import os
 import re
 import sqlite3
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer\n\nfrom .conversation_brain import respond as conversation_respond
 
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
-MAX_HISTORY = 5
+MAX_HISTORY = 20
 DB_LOCK = threading.RLock()
 
 # Approximate transliteration for common Urdu and Hindi chat vocabulary.
@@ -366,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_5"})
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
         return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
