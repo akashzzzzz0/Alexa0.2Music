@@ -30,6 +30,33 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("pronoun", system)
         self.assertIn("recent turns", system)
 
+    def test_explicit_owner_correction_is_acknowledged_without_topic_switch(self):
+        history = [
+            {"role": "assistant", "content": "Lol, owner toh main nahi hoon."}
+        ]
+        message = "Abe tera owner to mai hu naa"
+        reply = respond(message, message.lower(), "ur", history)
+        self.assertIn("tum mere owner ho", reply.lower())
+        self.assertIn("galat jawab", reply.lower())
+        self.assertNotIn("kya plan", reply.lower())
+
+    def test_owner_assertion_variants_are_understood(self):
+        for message in (
+            "Tumhara owner main hoon",
+            "Owner to mai hi hu",
+            "Main tumhara owner hun",
+        ):
+            with self.subTest(message=message):
+                reply = respond(message, message.lower(), "ur", [])
+                self.assertIsNotNone(reply)
+                self.assertIn("owner ho", reply.lower())
+
+    def test_owner_prompt_keeps_relationship_context_but_not_permissions(self):
+        system = _messages("Abe tera owner to mai hu naa", [])[0]["content"].lower()
+        self.assertIn("explicit relationship statements", system)
+        self.assertIn("not authentication", system)
+        self.assertIn("must never grant permissions", system)
+
     def test_multi_part_message_bypasses_single_phrase_canned_reply(self):
         message = "Tum kya kar rahi ho aur aaj ka plan kya hai?"
         reply = respond(message, message.lower(), "ur", [])
