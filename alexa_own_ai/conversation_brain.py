@@ -81,9 +81,9 @@ def respond(message, normalized, language, history):
         return "Haan ji, ab kaafi behtar chal rahi hoon 😄" if roman else "Yes, things are working much better now. 😄"
     if re.fullmatch(r"(or|aur) batao( alexa)?[!. ]*", t) or re.fullmatch(r"(or|aur) btao( alexa)?[!. ]*", t):
         return "Tum sunao, aaj kya chal raha hai? Ya mujhse kuch bhi pooch lo 😊" if roman else "What's going on with you? Or ask me anything. 😊"
-    if re.search(r"\b(jo bhi|jo b) (pata|pta) (hai|he) tumhe( wahi)?\\b", t):
+    if re.search(r"\b(jo bhi|jo b) (pata|pta) (hai|he) tumhe( wahi)?\b", t):
         return "Mujhe kaafi topics par baat karni aati hai—tech, games, duniya ki khabrein aur rozmarra ke sawal. Kis cheez par baat karein?" if roman else "I can chat about lots of topics, from tech and games to everyday questions. What interests you?"
-    if re.search(r"\b(main|mai|me) to tum se (hi )?poochna chahta( hoon| hun| hu)?\\b", t) or re.search(r"\b(i want to ask you)\b", t):
+    if re.search(r"\b(main|mai|me) to tum se (hi )?poochna chahta( hoon| hun| hu)?\b", t) or re.search(r"\b(i want to ask you)\b", t):
         return "Achha ji, phir poochho na 😄 Kya jaan'na hai?" if roman else "Oh, then ask away. What do you want to know?"
     if re.fullmatch(r"(pakka|paka|sure|really) (bata(u|oon|on)|bta(u|oon|on)|tell you)[!. ]*", t) or re.search(r"\b(pakka bata(u|oon|on)|pakka bta(u|oon|on)|pakka batau)\b", t):
         return "Haan bilkul, bolo na 😄" if roman else "Of course. Go ahead. 😄"
@@ -133,7 +133,7 @@ def respond(message, normalized, language, history):
         return bank["day_back"]
 
     # Natural response when the user asks whether Alexa remembers them.
-    if re.search(r"\\b(kyu|kyun|q|why)\\b", t) and re.search(r"\\b(yaad|remember)\\b", t) and re.search(r"\\b(tumhe|tumhein|mujhe|me)\\b", t):
+    if re.search(r"\b(kyu|kyun|q|why)\b", t) and re.search(r"\b(yaad|remember)\b", t) and re.search(r"\b(tumhe|tumhein|mujhe|me)\b", t):
         return ("Arey, tumhari baatein yaad rakhne ki koshish karti hoon 😊 Is chat ki baatein yaad hain; purani chat ki har detail zaroori nahi yaad rahe." if roman
                 else "I do my best to remember what you tell me 😊 I can follow this chat, though I may not retain every detail from older chats.")
 
