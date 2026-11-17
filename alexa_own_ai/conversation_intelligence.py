@@ -26,7 +26,7 @@ def build_context_summary(message, history):
     previous_assistant = _last(history, "assistant")
     current = str(message or "").strip()
     reference = bool(re.search(
-        r"\b(it|that|this|same|ye|woh|us|iska|uska|unhon|phir|kyun|kaise|matlab|mtlb)\b",
+        r"\b(it|that|this|same|ye|woh|wohi|wahi|us|iska|uska|unhon|phir|kyun|kaise|matlab|mtlb)\b",
         current.casefold(),
     ))
     correction = bool(re.search(
