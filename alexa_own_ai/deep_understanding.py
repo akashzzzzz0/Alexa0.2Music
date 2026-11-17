@@ -77,12 +77,12 @@ def analyze(message, history):
 
     correction = bool(re.search(_CORRECTION, text))
     owner_assertion = bool(re.search(
-        r"\\b(?:tera|tumhara|tumhari|aapka|apki)\\s+owner\\s+(?:to\\s+)?"
-        r"(?:mai|main|me)\\s+(?:hi\\s+)?(?:hu|hun|hoon|hon|na|naa)\\b|"
-        r"\\b(?:mai|main|me)\\s+(?:hi\\s+)?(?:tera|tumhara|tumhari|"
-        r"aapka|apki)\\s+owner\\s+(?:hu|hun|hoon|hon)\\b|"
-        r"\\bowner\\s+(?:to\\s+)?(?:mai|main|me)\\s+(?:hi\\s+)?"
-        r"(?:hu|hun|hoon|hon|na|naa)\\b",
+        r"\b(?:tera|tumhara|tumhari|aapka|apki)\s+owner\s+(?:to\s+)?"
+        r"(?:mai|main|me)\s+(?:hi\s+)?(?:hu|hun|hoon|hon|na|naa)\b|"
+        r"\b(?:mai|main|me)\s+(?:hi\s+)?(?:tera|tumhara|tumhari|"
+        r"aapka|apki)\s+owner\s+(?:hu|hun|hoon|hon)\b|"
+        r"\bowner\s+(?:to\s+)?(?:mai|main|me)\s+(?:hi\s+)?"
+        r"(?:hu|hun|hoon|hon|na|naa)\b",
         text,
     ))
     correction = correction or owner_assertion
