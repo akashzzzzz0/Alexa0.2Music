@@ -82,7 +82,7 @@ def detect_language(raw):
     t = normalize(raw)
     # Only two reply modes: English, or Roman Hindi/Urdu.
     # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
-    if re.search(r"\\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for)\\b", t):
+    if re.search(r"\b(the|is|are|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|me|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here\b", t):
         return "en"
     return "ur"
 
@@ -228,9 +228,9 @@ def response_for(message, history):
         return r["hello"]
 
     # Natural Roman Hindi/Urdu small talk and conversational repair.
-    if re.search(r"\\b(sab theek|sab thik|sab thek)\\b", t) and re.search(r"\\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\\b", t):
+    if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
-    if re.search(r"\\b(kis|kaun se|kon se)\\b", t) and re.search(r"\\b(alfaz|lafz|ilfaz|words|tarah)\\b", t) and re.search(r"\\b(samj|samajh|samjhe|samjha)\\w*\\b", t):
+    if re.search(r"\b(kis|kaun se|kon se)\b", t) and re.search(r"\b(alfaz|lafz|ilfaz|words|tarah)\b", t) and re.search(r"\b(samj|samajh|samjhe|samjha)\w*\b", t):
         prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
         if any(word in prior for word in ("rephrase", "doosre alfaaz", "apne words", "context", "samajh")):
             return "Arey, meri galti! Tumne bilkul theek kaha tha. Tumhari pehli baat samajh aa gayi thi—mujhe dobara poochna nahi chahiye tha."
