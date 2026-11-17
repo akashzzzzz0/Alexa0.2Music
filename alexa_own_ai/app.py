@@ -38,6 +38,13 @@ try:
 except ImportError:
     from context_envelope import normalize_context
 
+try:
+    from .feedback_learning import record_feedback, feedback_guidance
+    from .response_decision import decide as decide_response
+except ImportError:
+    from feedback_learning import record_feedback, feedback_guidance
+    from response_decision import decide as decide_response
+
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
@@ -299,7 +306,7 @@ def get_memory_items(scope):
 
 
 def request_context(body, default_scope):
-    """Combine verified saved memory with request-scoped facts for one reply."""
+    """Combine approved memory, explicit feedback, and request facts."""
     scope = _memory_scope(body.get("memory_scope") or default_scope)
     memory_result = save_memory_items(
         scope,
@@ -307,20 +314,33 @@ def request_context(body, default_scope):
         forget_keys=body.get("forget_memory_keys"),
         forget_all=body.get("forget_all_memory") is True,
     )
+    memory_result["feedback_recorded"] = record_feedback(
+        DB_PATH, scope, body.get("feedback")
+    )
     saved = get_memory_items(scope)
     request_memory = body.get("memory_context")
+    memory_payload = {}
     if saved:
-        memory_payload = {"saved_memory": saved}
-        if isinstance(request_memory, (dict, list, tuple)) and request_memory:
-            memory_payload["request_memory"] = request_memory
-        elif isinstance(request_memory, str) and request_memory.strip():
-            memory_payload["request_memory"] = request_memory.strip()[:MAX_MEMORY_VALUE_CHARS]
-    else:
+        memory_payload["saved_memory"] = saved
+    if isinstance(request_memory, (dict, list, tuple)) and request_memory:
+        memory_payload["request_memory"] = request_memory
+    elif isinstance(request_memory, str) and request_memory.strip():
+        memory_payload["request_memory"] = request_memory.strip()[:MAX_MEMORY_VALUE_CHARS]
+    guidance = feedback_guidance(DB_PATH, scope)
+    if guidance:
+        memory_payload["explicit_feedback_guidance"] = guidance
+    if not memory_payload:
         memory_payload = request_memory
     context = normalize_context(
         body.get("context"), memory_payload, body.get("media_context")
     )
     return context, memory_result, len(saved)
+
+
+def response_decision(message, body):
+    """Return a conservative action recommendation for the calling chat app."""
+    decision_context = body.get("decision_context")
+    return decide_response(message, decision_context)
 
 
 def get_history(conversation, supplied, current_message=""):
@@ -539,9 +559,10 @@ class Handler(BaseHTTPRequestHandler):
             context, memory_change, memory_items = request_context(body, conversation)
             history = get_history(conversation, supplied, message)
             reply = response_for(message, history, context=context)
+            decision = response_decision(message, body)
             save_turns(conversation, message, reply)
             model_status = model_runtime_status()
-            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2), "memory_items": memory_items, "memory_saved": memory_change["saved"], "memory_deleted": memory_change["deleted"]})
+            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2), "memory_items": memory_items, "memory_saved": memory_change["saved"], "memory_deleted": memory_change["deleted"], "feedback_recorded": memory_change["feedback_recorded"], "decision": decision})
 
         messages = body.get("messages", [])
         if not isinstance(messages, list): messages = []
@@ -555,12 +576,15 @@ class Handler(BaseHTTPRequestHandler):
         context, memory_change, memory_items = request_context(body, conversation)
         history = get_history(conversation, messages, message)
         reply = response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
+        decision = response_decision(message, body)
         # Always return a non-empty assistant message as a completed turn.
         save_turns(conversation, message, reply)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro-v2", "object": "chat.completion",
             "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}],
-            "x_alexa_memory": {"items": memory_items, "saved": memory_change["saved"], "deleted": memory_change["deleted"]}
+            "x_alexa_memory": {"items": memory_items, "saved": memory_change["saved"], "deleted": memory_change["deleted"]},
+            "x_alexa_feedback_recorded": memory_change["feedback_recorded"],
+            "x_alexa_decision": decision
         })
 
     def log_message(self, fmt, *args):
