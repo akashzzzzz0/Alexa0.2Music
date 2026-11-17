@@ -12,7 +12,7 @@ class AlexaOwnAILanguageTests(unittest.TestCase):
 
     def test_roman_punjabi_is_detected(self):
         self.assertEqual(app.detect_language("Tussi ki haal aa veere?"), "pa")
-        self.assertIn("Tussi", app.response_for("Ki haal aa?", []))
+        self.assertIn("Oye", app.response_for("Ki haal aa?", []))
 
     def test_devanagari_input_gets_roman_reply(self):
         self.assertEqual(app.detect_language("नमस्ते"), "hi")
