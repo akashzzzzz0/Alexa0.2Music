@@ -102,15 +102,18 @@ class ModelRuntimeTests(unittest.TestCase):
             message, "Achha! Phir dekhte hain tumhari AI kya kamaal karti hai 😄"
         ))
 
-    def test_ai_self_disclosure_is_blocked_even_when_directly_requested(self):
-        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+    def test_ai_identity_is_only_blocked_when_unsolicited(self):
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
             "Tum kon ho?", "Main Alexa hoon, ek AI assistant."
         ))
-        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
             "Are you AI?", "Yes, I am an AI language model."
         ))
-        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+        self.assertFalse(model_runtime._is_unprompted_meta_reply(
             "Tum kya ho?", "Main ek AI hoon aur tumhari help karti hoon."
+        ))
+        self.assertTrue(model_runtime._is_unprompted_meta_reply(
+            "Aaj kya kar rahi ho?", "I'm an AI assistant and I'm here to help."
         ))
         self.assertFalse(model_runtime._is_unprompted_meta_reply(
             "Tum kon ho?", "Main Alexa hoon. Bolo, kya baat hai?"
