@@ -3,6 +3,7 @@ import unittest
 
 from model_runtime import _messages
 from conversation_brain import respond
+from deep_understanding import analyze
 
 
 class ConversationQualityPromptTests(unittest.TestCase):
@@ -75,6 +76,40 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("emoji-only", system)
         self.assertIn("not fixed meanings", system)
         self.assertIn("context is insufficient", system)
+
+
+    def test_number_one_question_without_ranking_context_asks_relevant_clarification(self):
+        cases = ("No 1 kon hai 🫠", "No.1 kaun hai?", "Who is number one?", "Who is #1?")
+        for message in cases:
+            with self.subTest(message=message):
+                reply = respond(message, message.lower(), "ur" if not message.startswith("Who") else "en", [])
+                self.assertIsNotNone(reply)
+                self.assertIn("leaderboard" if not message.startswith("Who") else "ranking", reply.lower())
+                self.assertNotIn("main hu alexa", reply.lower())
+                self.assertNotIn("i am number one", reply.lower())
+
+    def test_number_one_question_uses_supplied_ranking_context(self):
+        message = "No 1 kon hai?"
+        context = {"group_leaderboard": [{"rank": 1, "name": "Gautam", "score": 250}]}
+        self.assertIsNone(respond(message, message.lower(), "ur", [], context=context))
+
+    def test_number_one_question_uses_recent_ranking_conversation(self):
+        message = "No 1 kon hai?"
+        history = [
+            {"role": "user", "content": "Group leaderboard check karo"},
+            {"role": "assistant", "content": "Leaderboard mein Gautam 250 points ke saath top par hai."},
+        ]
+        self.assertIsNone(respond(message, message.lower(), "ur", history))
+
+    def test_deep_understanding_labels_number_one_question(self):
+        cues = analyze("No 1 kon hai 🫠", [])
+        self.assertIn("message_act=ranking_or_comparison_question", cues)
+        self.assertIn("asks_about_number_one_or_ranking=yes", cues)
+
+    def test_prompt_requires_evidence_for_number_one_answers(self):
+        system = _messages("No 1 kon hai?", [])[0]["content"].lower()
+        self.assertIn("leaderboard", system)
+        self.assertIn("never claim that you yourself are no. 1", system)
 
 
 if __name__ == "__main__":
