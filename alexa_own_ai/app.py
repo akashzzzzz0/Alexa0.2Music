@@ -14,6 +14,7 @@ import re
 import sqlite3
 import sys
 import threading
+from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Resolve the service directory explicitly so the dialogue module is found even
@@ -37,6 +38,7 @@ API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
 MAX_HISTORY = 20
+INDIA_TZ = ZoneInfo("Asia/Kolkata")
 DB_LOCK = threading.RLock()
 
 # Approximate transliteration for common Urdu and Hindi chat vocabulary.
@@ -173,6 +175,11 @@ REPLIES = {
 "unknown":"Haanji, main sun rahi aan. Gall thodi hor samjha deo taake main sahi jawab de sakaan."
 }
 }
+
+def india_now():
+    """Return the current aware datetime in India Standard Time."""
+    return dt.datetime.now(INDIA_TZ)
+
 
 def safe_math(expression):
     expression = expression.replace("×", "*").replace("÷", "/").replace("^", "**")
@@ -326,11 +333,11 @@ def response_for(message, history):
         return r["yes"]
     if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
         return r["no"]
-    if re.search(r"\b(time kya|what time|current time|waqt kya|samay kya|kinna time)\b", t):
-        now = dt.datetime.now().astimezone().strftime("%I:%M %p")
+    if re.search(r"\b(time kya|abhi time|abhi kitne? baje|kitna time|what time|current time|time now|waqt kya|abhi waqt|samay kya|kinna time)\b", t):
+        now = india_now().strftime("%I:%M %p IST")
         return ("It is " if lang == "en" else "Hun time " if lang == "pa" else "Abhi time ") + now + "."
-    if re.search(r"\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", t):
-        today = dt.datetime.now().astimezone().strftime("%d %B %Y")
+    if re.search(r"\b(today date|date today|aaj date|aaj ki date|date kya|what date|what is the date|today.s date|aaj ki tareekh|ajj di tareekh|tareekh kya|aaj ka din|which day is it|what day is it)\b", t):
+        today = india_now().strftime("%A, %d %B %Y")
         return ("Today's date is " if lang == "en" else "Ajj di tareekh " if lang == "pa" else "Aaj ki tareekh ") + today + "."
     # Short conversational turns need context-sensitive replies, not the same
     # generic clarification on every message.

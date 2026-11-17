@@ -26,7 +26,7 @@ def route_response(message, normalized, language, history):
     # a model call or allowing a generative answer to replace their result.
     if re.search(r"\d\s*[+*/%\-]\s*\d", text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
         return None
-    if re.search(r"\b(time kya|what time|current time|waqt kya|samay kya|kinna time|today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", text):
+    if re.search(r"\b(time kya|abhi time|abhi kitne? baje|kitna time|what time|current time|time now|waqt kya|abhi waqt|samay kya|kinna time|today date|date today|aaj date|aaj ki date|date kya|what date|what is the date|today.s date|aaj ki tareekh|ajj di tareekh|tareekh kya|aaj ka din|which day is it)\b", text):
         return None
 
     # Open-ended conversation, factual questions, and contextual follow-ups
