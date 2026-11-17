@@ -5,9 +5,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-DEFAULT_TIMEOUT = 35
-MAX_CONTEXT_MESSAGES = 10
-MAX_MESSAGE_CHARS = 1800
+DEFAULT_TIMEOUT = 12
+MAX_CONTEXT_MESSAGES = 6
+MAX_MESSAGE_CHARS = 1000
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
@@ -92,7 +92,7 @@ def _cloudflare_generate(messages):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 512,
+        "max_completion_tokens": 192,
         "temperature": 0.7,
         "reasoning_effort": None,
         "chat_template_kwargs": {
@@ -171,7 +171,7 @@ def _local_generate(message, history):
         "model": model_name,
         "messages": _messages(message, history),
         "temperature": 0.7,
-        "max_tokens": 400,
+        "max_tokens": 180,
     }).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
