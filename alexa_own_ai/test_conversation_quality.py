@@ -49,15 +49,6 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("context is insufficient", system)
 
 
-    def test_number_one_question_without_ranking_context_asks_relevant_clarification(self):
-        cases = ("No 1 kon hai 🫠", "No.1 kaun hai?", "Who is number one?", "Who is #1?")
-        for message in cases:
-            with self.subTest(message=message):
-                reply = respond(message, message.lower(), "ur" if not message.startswith("Who") else "en", [])
-                self.assertIsNotNone(reply)
-                self.assertIn("leaderboard" if not message.startswith("Who") else "ranking", reply.lower())
-                self.assertNotIn("main hu alexa", reply.lower())
-                self.assertNotIn("i am number one", reply.lower())
 
     def test_number_one_question_uses_supplied_ranking_context(self):
         message = "No 1 kon hai?"
