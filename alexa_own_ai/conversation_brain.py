@@ -118,7 +118,7 @@ def respond(message, normalized, language, history):
                 else "Haan ji, bilkul samajh sakti hoon 😊 Tum apni baat normally batao, main dhyan se sun rahi hoon.")
 
     # Common conversational intents and questions about Alexa.
-    if re.search(r"\b(kaisi ho|kaise ho|kese ho|how are you|how r u|sab theek|sab thik|sab thek)\b", t):
+    if re.search(r"\b(kaisi ho|kaise ho|kese ho|kese ha|kaise ha|kaisa ha|kaisa hai|kesa hai|how are you|how r u|sab theek|sab thik|sab thek)\b", t):
         return bank["how_back"]
     if re.search(r"\b(kya kar rahi|kya kar rahe|what are you doing|what r u doing)\b", t):
         return bank["what_doing"]
