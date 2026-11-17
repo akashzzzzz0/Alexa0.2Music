@@ -92,8 +92,9 @@ def _cloudflare_generate(messages):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 800,
+        "max_completion_tokens": 1600,
         "temperature": 0.7,
+        "reasoning_effort": None,
         "chat_template_kwargs": {
             "enable_thinking": False,
             "clear_thinking": True,
