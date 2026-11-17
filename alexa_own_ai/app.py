@@ -219,33 +219,33 @@ def response_for(message, history):
     r = REPLIES[lang]
     if not t:
         return r["hello"]
-    math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\\s+", "", t)
-    if re.search(r"\\d\\s*[+*/%\\-]\\s*\\d", math_text) or re.search(r"\\d\\s*[×÷^]\\s*\\d", raw):
+    math_text = re.sub(r"^(what is|calculate|solve|kitna hota hai|batao|btao|iska jawab)\s+", "", t)
+    if re.search(r"\d\s*[+*/%\-]\s*\d", math_text) or re.search(r"\d\s*[×÷^]\s*\d", raw):
         value = safe_math(math_text if math_text != t else raw)
         if value is not None:
             if lang == "en": return "The answer is " + str(value) + "."
             if lang == "hi": return "Iska jawab " + str(value) + " hai."
-            if lang == "pa": return "Isda jawab " + str(value) + aa."
+            if lang == "pa": return "Isda jawab " + str(value) + " aa.""
             return "Iska jawab " + str(value) + " hai."
-    if re.search(r"\\b(good morning|subah|subha|morning)\\b", t):
+    if re.search(r"\b(good morning|subah|subha|morning)\b", t):
         return "Good morning! Aaj ka din kaisa ja raha hai?" if lang != "en" else "Good morning! How's your day going?"
-    if re.search(r"\\b(hello|hi|hii+|hey|heyy+|salam|salaam|aoa|sat sri akal|satsriakal|ki haal)\\b", t):
+    if re.search(r"\b(hello|hi|hii+|hey|heyy+|salam|salaam|aoa|sat sri akal|satsriakal|ki haal)\b", t):
         return r["hello"]
-    if re.search(r"\\b(how are you|how r u|kaise ho|kaisay ho|kese ho|kya haal|ki haal|kida|kidda)\\b", t):
+    if re.search(r"\b(how are you|how r u|kaise ho|kaisay ho|kese ho|kya haal|ki haal|kida|kidda)\b", t):
         return r["how"]
-    if re.search(r"\\b(thank you|thanks|shukriya|bohat shukriya|meharbani|dhanvaad|dhanyavaad)\\b", t):
+    if re.search(r"\b(thank you|thanks|shukriya|bohat shukriya|meharbani|dhanvaad|dhanyavaad)\b", t):
         return r["thanks"]
-    if re.search(r"\\b(who are you|tum kon ho|tum kaun ho|aap kon|your name|naam kya|tu kaun)\\b", t):
+    if re.search(r"\b(who are you|tum kon ho|tum kaun ho|aap kon|your name|naam kya|tu kaun)\b", t):
         return r["identity"]
-    if re.search(r"\\b(bored|boring|bore ho|pak gaya|pak gayi|vehla|vela)\\b", t):
+    if re.search(r"\b(bored|boring|bore ho|pak gaya|pak gayi|vehla|vela)\b", t):
         return r["bored"]
-    if re.search(r"\\b(sad|udaas|pareshan|tension|mood off|dukhi|dil udaas)\\b", t):
+    if re.search(r"\b(sad|udaas|pareshan|tension|mood off|dukhi|dil udaas)\b", t):
         return r["sad"]
-    if re.search(r"\\b(happy|khush|khushi|great news|vadiya khabar|changa hoya)\\b", t):
+    if re.search(r"\b(happy|khush|khushi|great news|vadiya khabar|changa hoya)\b", t):
         return r["happy"]
-    if re.search(r"\\b(joke|jokes|mazaak|mazak|chutkula|latifa|hasao|laugh)\\b", t):
+    if re.search(r"\b(joke|jokes|mazaak|mazak|chutkula|latifa|hasao|laugh)\b", t):
         return r["joke"]
-    if re.search(r"\\b(bye|goodbye|allah hafiz|khuda hafiz|see you|fer milange|chal bye)\\b", t):
+    if re.search(r"\b(bye|goodbye|allah hafiz|khuda hafiz|see you|fer milange|chal bye)\b", t):
         return r["bye"]
     if re.fullmatch(r"(yes|yeah|yup|haan|han|ji|achha|acha|theek|ok|okay|bilkul|haaji)[!. ]*", t):
         prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
@@ -254,10 +254,10 @@ def response_for(message, history):
         return r["yes"]
     if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
         return r["no"]
-    if re.search(r"\\b(time kya|what time|current time|waqt kya|samay kya|kinna time)\\b", t):
+    if re.search(r"\b(time kya|what time|current time|waqt kya|samay kya|kinna time)\b", t):
         now = dt.datetime.now().astimezone().strftime("%I:%M %p")
         return ("It is " if lang == "en" else "Hun time " if lang == "pa" else "Abhi time ") + now + "."
-    if re.search(r"\\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\\b", t):
+    if re.search(r"\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", t):
         today = dt.datetime.now().astimezone().strftime("%d %B %Y")
         return ("Today's date is " if lang == "en" else "Ajj di tareekh " if lang == "pa" else "Aaj ki tareekh ") + today + "."
     # Contextual follow-up: acknowledge a topic from the recent conversation.
