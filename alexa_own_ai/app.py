@@ -12,12 +12,19 @@ import math
 import os
 import re
 import sqlite3
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+# Resolve the service directory explicitly so the dialogue module is found even
+# when the platform launches this file with a different working directory.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 try:
     from .conversation_brain import respond as conversation_respond
-except ImportError:  # support running app.py from the service root
+except ImportError:  # support direct execution: python app.py
     from conversation_brain import respond as conversation_respond
 
 PORT = int(os.getenv("PORT", "3000"))
