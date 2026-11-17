@@ -142,7 +142,7 @@ def analyze(message, history):
         tones.append("neutral_or_unclear")
 
     strategies = {
-        "correction_or_disagreement": "acknowledge_the_specific_correction_then_replace_the_wrong_interpretation",
+        "correction_or_disagreement": "acknowledge_correction_first_then_replace_the_wrong_interpretation",
         "question": "answer_the_actual_question_first_and_cover_each_requested_part",
         "request": "identify_the_requested_outcome_and_do_it_without_answering_only_a_surface_keyword",
         "answer_to_previous_question": "connect_this_answer_to_the_assistant_question_and_continue_that_thread",
@@ -156,7 +156,7 @@ def analyze(message, history):
     }
 
     lines = [
-        "Whole-message conversation analysis (cautious cues, not a definitive meaning):",
+        "Whole-message conversation analysis (heuristic cues, not certainties):",
         "message_act=" + act,
         "script_hint=" + _script_hint(raw),
         "word_count=" + str(len(words)),
