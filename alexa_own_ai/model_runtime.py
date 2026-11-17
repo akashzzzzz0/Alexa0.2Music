@@ -4,10 +4,12 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+import time
 
-DEFAULT_TIMEOUT = 12
-MAX_CONTEXT_MESSAGES = 12
-MAX_MESSAGE_CHARS = 1000
+DEFAULT_TIMEOUT = 8
+MAX_TOTAL_INFERENCE_SECONDS = 10
+MAX_CONTEXT_MESSAGES = 10
+MAX_MESSAGE_CHARS = 900
 DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
@@ -111,7 +113,7 @@ def _timeout():
     return min(max(value, 3), 90)
 
 
-def _cloudflare_generate(messages):
+def _cloudflare_generate(messages, timeout=None):
     account = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
     token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
     if not account or not token:
@@ -125,7 +127,7 @@ def _cloudflare_generate(messages):
     )
     payload = json.dumps({
         "messages": messages,
-        "max_completion_tokens": 192,
+        "max_completion_tokens": 144,
         "temperature": 0.7,
         "reasoning_effort": None,
         "chat_template_kwargs": {
@@ -142,7 +144,7 @@ def _cloudflare_generate(messages):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=_timeout()) as response:
+        with urllib.request.urlopen(request, timeout=timeout or _timeout()) as response:
             result = json.loads(response.read(1_000_000).decode("utf-8"))
         if not isinstance(result, dict) or result.get("success") is False:
             print("Cloudflare Workers AI returned an unsuccessful response:", json.dumps(result, ensure_ascii=False)[:3000], flush=True)
@@ -194,7 +196,7 @@ def _cloudflare_generate(messages):
         return None
 
 
-def _local_generate(message, history):
+def _local_generate(message, history, timeout=None):
     endpoint = _endpoint(os.getenv("ALEXA_LOCAL_MODEL_URL", ""))
     if not endpoint:
         return None
@@ -204,14 +206,14 @@ def _local_generate(message, history):
         "model": model_name,
         "messages": _messages(message, history),
         "temperature": 0.7,
-        "max_tokens": 180,
+        "max_tokens": 144,
     }).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=_timeout()) as response:
+        with urllib.request.urlopen(request, timeout=timeout or _timeout()) as response:
             result = json.loads(response.read(1_000_000).decode("utf-8"))
         choices = result.get("choices", []) if isinstance(result, dict) else []
         if not choices or not isinstance(choices[0], dict):
@@ -260,15 +262,24 @@ def generate(message, history):
     """Try Cloudflare Workers AI, then an optional self-hosted OpenAI-compatible model."""
     if not str(message or "").strip():
         return None
+    started = time.monotonic()
+    deadline = started + MAX_TOTAL_INFERENCE_SECONDS
     messages = _messages(message, history)
-    answer = _cloudflare_generate(messages)
+    answer = _cloudflare_generate(messages, timeout=min(_timeout(), max(1.0, deadline - time.monotonic())))
     if answer and not _is_unprompted_meta_reply(message, answer):
+        print("Alexa inference completed via Cloudflare in {:.2f}s.".format(time.monotonic() - started), flush=True)
         return answer
     if answer:
         print("Discarding off-topic Alexa identity/time filler from Cloudflare response.", flush=True)
-    answer = _local_generate(message, history)
-    if answer and not _is_unprompted_meta_reply(message, answer):
-        return answer
-    if answer:
-        print("Discarding off-topic Alexa identity/time filler from local model response.", flush=True)
+
+    # Keep the optional self-hosted fallback inside one overall latency budget;
+    # do not let two sequential provider timeouts make a Telegram reply feel stuck.
+    remaining = deadline - time.monotonic()
+    if remaining >= 1.0 and os.getenv("ALEXA_LOCAL_MODEL_URL", "").strip():
+        answer = _local_generate(message, history, timeout=min(_timeout(), remaining))
+        if answer and not _is_unprompted_meta_reply(message, answer):
+            print("Alexa inference completed via self-hosted model in {:.2f}s.".format(time.monotonic() - started), flush=True)
+            return answer
+        if answer:
+            print("Discarding off-topic Alexa identity/time filler from local model response.", flush=True)
     return None
