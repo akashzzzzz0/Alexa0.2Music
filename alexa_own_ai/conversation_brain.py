@@ -113,7 +113,11 @@ def respond(message, normalized, language, history):
     if re.fullmatch(r"(kese|kaise|kaisay) ha(n)?", t):
         return "Main theek hoon, tum sunao? 😊"
 
-    if re.search(r"\b(kya matlab|matlab kya|what do you mean|meaning kya|kis liye|kyun poocha|why ask)\b", t):
+    if re.search(r"\b(kya matlab|matlab kya|mtlb|matlb|what do you mean|meaning kya|kis liye|kyun poocha|why ask)\b", t):
+        # A meaning/follow-up question depends on what Alexa just said. Let the
+        # model interpret the preceding turn instead of returning a fixed script.
+        if history:
+            return None
         return bank["meaning"]
     if re.search(r"\b(dobara|phir se|repeat|again|samjhao|samjha do|explain again)\b", t):
         return bank["repeat"]
