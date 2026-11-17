@@ -120,7 +120,7 @@ def respond(message, normalized, language, history):
     # Common conversational intents and questions about Alexa.
     if re.search(r"\b(kaisi ho|kaise ho|kese ho|kese ha|kaise ha|kaisa ha|kaisa hai|kesa hai|how are you|how r u|sab theek|sab thik|sab thek)\b", t):
         return bank["how_back"]
-    if re.search(r"\b(kya kar rahi|kya kar rahe|what are you doing|what r u doing)\b", t):
+    if re.search(r"\b(kya\s+kar\s+(?:rahi|rahe|rhi|rhe|ri|re)(?:\s+ho)?|kya\s+kr\s+(?:rahi|rahe|rhi|rhe|ri|re)(?:\s+ho)?|what\s+are\s+you\s+doing|what\s+r\s+u\s+doing)\b", t):
         return bank["what_doing"]
     if re.search(r"\b(kaun ho|kon ho|who are you|tumhara naam|your name)\b", t):
         return bank["ask_identity"]
