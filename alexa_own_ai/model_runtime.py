@@ -263,6 +263,8 @@ def _is_unprompted_meta_reply(message, answer):
         "i am ai", "i'm ai", "i am an artificial intelligence",
         "i am artificial intelligence", "ai assistant", "an ai assistant",
         "main ai hoon", "main aik ai", "main ek ai", "mai ai hu",
+        "main ai nahi", "main aik ai nahi", "main ek ai nahi",
+        "i am not an ai", "i'm not an ai", "i am not ai", "im not ai",
         "main artificial intelligence", "main ek artificial intelligence",
         "main aik artificial intelligence", "main chatbot hoon",
         "main bot hoon", "i am a chatbot", "i am a bot",
