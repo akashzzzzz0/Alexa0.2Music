@@ -101,9 +101,8 @@ def respond(message, normalized, language, history):
         return ("That reply was off. What did you mean? I'll answer directly."
                 if not roman else "Arey, mera jawab ghalat tha kya? Batao, main seedha jawab deti hoon.")
     if re.search(r"\b(nahi|nhi|nahin|no)\b", t) and re.search(r"\b(samajh|samj|smajh|smaj|understand)\w*\b", t):
-        if re.search(r"\b(tum|tu|aap|you|main|mai|me)\b", t):
-            return ("You're right, I misunderstood. Tell me what I missed."
-                    if not roman else "Achha, meri galti. Main tumhari baat nahi samajh paayi. Kya kehna chahte ho?")
+        return ("You're right, I misunderstood. Tell me what I missed."
+                if not roman else "Achha, meri galti. Main tumhari baat nahi samajh paayi. Kya kehna chahte ho?")
     if re.search(r"\b(meri baat|mujhe|mujy|mujhko)\b", t) and re.search(r"\b(nahi|nhi|nahin)\b", t) and re.search(r"\b(samajh|samj|understand)\w*\b", t):
         return ("You're right, I missed your point. What should I respond to?"
                 if not roman else "Sahi keh rahe ho, main tumhari baat miss kar gayi. Tum kya keh rahe the?")
