@@ -43,6 +43,9 @@ API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
 DB_PATH = os.getenv("ALEXA_AI_DB_PATH", "alexa_memory.sqlite3")
 MAX_BODY = 32_000
 MAX_HISTORY = 20
+MAX_MEMORY_ITEMS = 40
+MAX_MEMORY_KEY_CHARS = 80
+MAX_MEMORY_VALUE_CHARS = 800
 INDIA_TZ = ZoneInfo("Asia/Kolkata")
 DB_LOCK = threading.RLock()
 
@@ -223,7 +226,102 @@ def memory_connection():
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("CREATE TABLE IF NOT EXISTS turns (conversation TEXT NOT NULL, seq INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conversation_seq ON turns(conversation, seq)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS memory_items ("
+        "scope TEXT NOT NULL, memory_key TEXT NOT NULL, memory_value TEXT NOT NULL, "
+        "updated_at TEXT NOT NULL, PRIMARY KEY(scope, memory_key))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_scope_updated ON memory_items(scope, updated_at)")
     return conn
+
+
+def _memory_scope(value):
+    return str(value or "").strip()[:256]
+
+
+def save_memory_items(scope, updates=None, forget_keys=None, forget_all=False):
+    """Persist only explicit, caller-approved scalar memory updates."""
+    scope = _memory_scope(scope)
+    if not scope:
+        return {"saved": 0, "deleted": 0}
+    updates = updates if isinstance(updates, dict) else {}
+    forget_keys = forget_keys if isinstance(forget_keys, list) else []
+    saved = deleted = 0
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    blocked = {"password", "token", "secret", "api_key", "apikey", "authorization"}
+    with DB_LOCK:
+        with memory_connection() as conn:
+            if forget_all:
+                cur = conn.execute("DELETE FROM memory_items WHERE scope=?", (scope,))
+                deleted += cur.rowcount
+            else:
+                for raw_key in forget_keys[:MAX_MEMORY_ITEMS]:
+                    key = str(raw_key or "").strip()[:MAX_MEMORY_KEY_CHARS]
+                    if key:
+                        cur = conn.execute("DELETE FROM memory_items WHERE scope=? AND memory_key=?", (scope, key))
+                        deleted += max(cur.rowcount, 0)
+            for raw_key, raw_value in list(updates.items())[:MAX_MEMORY_ITEMS]:
+                key = str(raw_key or "").strip()[:MAX_MEMORY_KEY_CHARS]
+                if not key or key.casefold() in blocked:
+                    continue
+                if not isinstance(raw_value, (str, int, float, bool)):
+                    continue
+                value = str(raw_value).strip()[:MAX_MEMORY_VALUE_CHARS]
+                if not value:
+                    continue
+                conn.execute(
+                    "INSERT INTO memory_items(scope, memory_key, memory_value, updated_at) "
+                    "VALUES(?,?,?,?) ON CONFLICT(scope, memory_key) DO UPDATE SET "
+                    "memory_value=excluded.memory_value, updated_at=excluded.updated_at",
+                    (scope, key, value, now),
+                )
+                saved += 1
+            conn.execute(
+                "DELETE FROM memory_items WHERE scope=? AND memory_key NOT IN "
+                "(SELECT memory_key FROM memory_items WHERE scope=? ORDER BY updated_at DESC LIMIT ?)",
+                (scope, scope, MAX_MEMORY_ITEMS),
+            )
+    return {"saved": saved, "deleted": deleted}
+
+
+def get_memory_items(scope):
+    scope = _memory_scope(scope)
+    if not scope:
+        return {}
+    with DB_LOCK:
+        with memory_connection() as conn:
+            rows = conn.execute(
+                "SELECT memory_key, memory_value FROM memory_items WHERE scope=? "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (scope, MAX_MEMORY_ITEMS),
+            ).fetchall()
+    return {key: value for key, value in rows}
+
+
+def request_context(body, default_scope):
+    """Combine verified saved memory with request-scoped facts for one reply."""
+    scope = _memory_scope(body.get("memory_scope") or default_scope)
+    memory_result = save_memory_items(
+        scope,
+        updates=body.get("memory_updates"),
+        forget_keys=body.get("forget_memory_keys"),
+        forget_all=body.get("forget_all_memory") is True,
+    )
+    saved = get_memory_items(scope)
+    request_memory = body.get("memory_context")
+    if saved:
+        memory_payload = {"saved_memory": saved}
+        if isinstance(request_memory, (dict, list, tuple)) and request_memory:
+            memory_payload["request_memory"] = request_memory
+        elif isinstance(request_memory, str) and request_memory.strip():
+            memory_payload["request_memory"] = request_memory.strip()[:MAX_MEMORY_VALUE_CHARS]
+    else:
+        memory_payload = request_memory
+    context = normalize_context(
+        body.get("context"), memory_payload, body.get("media_context")
+    )
+    return context, memory_result, len(saved)
+
 
 def get_history(conversation, supplied, current_message=""):
     supplied_messages = [x for x in supplied if isinstance(x, dict)]
@@ -415,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?", 1)[0].rstrip("*") == "/health":
             model_status = model_runtime_status()
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_recent_20+scoped_long_term"})
         return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
@@ -438,12 +536,12 @@ class Handler(BaseHTTPRequestHandler):
             supplied = body.get("history", [])
             if not isinstance(supplied, list): supplied = []
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-            context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
+            context, memory_change, memory_items = request_context(body, conversation)
             history = get_history(conversation, supplied, message)
             reply = response_for(message, history, context=context)
             save_turns(conversation, message, reply)
             model_status = model_runtime_status()
-            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
+            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2), "memory_items": memory_items, "memory_saved": memory_change["saved"], "memory_deleted": memory_change["deleted"]})
 
         messages = body.get("messages", [])
         if not isinstance(messages, list): messages = []
@@ -454,14 +552,15 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-        context = normalize_context(body.get("context"), body.get("memory_context"), body.get("media_context"))
+        context, memory_change, memory_items = request_context(body, conversation)
         history = get_history(conversation, messages, message)
         reply = response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
         # Always return a non-empty assistant message as a completed turn.
         save_turns(conversation, message, reply)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro-v2", "object": "chat.completion",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}]
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}],
+            "x_alexa_memory": {"items": memory_items, "saved": memory_change["saved"], "deleted": memory_change["deleted"]}
         })
 
     def log_message(self, fmt, *args):

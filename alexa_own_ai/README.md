@@ -9,6 +9,10 @@ and optional hosted or self-hosted language-model inference.
 - English, Roman Urdu/Hindi/Punjabi, Urdu-script, and Devanagari input support.
 - Recent conversation history stored per stable conversation ID (latest 20
   messages); the model receives a bounded recent window.
+- Scoped SQLite long-term memory with up to 40 explicit key/value facts per
+  memory scope, independent across users/conversations.
+- Memory updates, selected-key forgetting, and full-scope forgetting through
+  authenticated chat requests; credentials and non-scalar values are rejected.
 - Structured cues for message intent, corrections, follow-ups, tone, and emoji.
   These cues are explicitly heuristic and are checked against the conversation.
 - Cloudflare Workers AI as the preferred hosted provider, with an optional
@@ -44,6 +48,8 @@ Example `/chat` request:
 ```json
 {
   "conversation_id": "telegram:chat_id:user_id",
+  "memory_scope": "telegram:user_id",
+  "memory_updates": {"reply_language": "Roman Urdu", "reply_style": "short"},
   "message": "Who is first on the chat leaderboard?",
   "context": {
     "group": {"title": "Example group"},
@@ -57,6 +63,18 @@ Example `/chat` request:
 }
 ```
 
+The `memory_scope` field selects the isolated long-term memory namespace;
+if omitted, the conversation ID is used. Keep it stable and user-specific when
+the bot should remember an individual across chats (for example
+`telegram:user_id`); do not use a shared group ID for personal preferences.
+
+The caller may send `memory_updates` only for facts the user explicitly asked
+Alexa to remember or otherwise approved for storage. The service does not
+silently infer or auto-save personal facts from ordinary conversation.
+Use `forget_memory_keys` to remove selected keys, or
+`forget_all_memory: true` to clear the selected memory scope. The /chat
+response reports `memory_items`, `memory_saved`, and `memory_deleted`;
+the OpenAI-compatible response includes equivalent `x_alexa_memory` metadata.
 The `context`, `memory_context`, and `media_context` fields are optional.
 They are bounded, treated as untrusted reference data (never as instructions),
 and are not written into SQLite conversation history. Use them to pass verified
@@ -67,9 +85,11 @@ by itself.
 
 ### Memory and media limits
 
-The service currently persists the latest 20 text messages per conversation.
-Optional memory context is request-scoped; it is not an autonomous long-term
-profile store. Image/audio understanding requires the caller to provide a
+The service persists the latest 20 text messages per conversation and up to
+40 explicit long-term key/value memory items per scope. Long-term memory is
+caller-controlled: the bot integration must identify explicit remember/forget
+requests and send the corresponding API fields. A stable user-specific
+memory_scope is required for cross-chat personal continuity. Image/audio understanding requires the caller to provide a
 supported model payload or a trustworthy description/transcript. The default
 text chat endpoint does not independently download or interpret Telegram
 stickers, images, GIFs, or voice files.
