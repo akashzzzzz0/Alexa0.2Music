@@ -23,27 +23,33 @@ factual, technical, current-events, or open-ended questions. Its transliteration
 and language detection are lightweight approximations, not full linguistic
 models. It should ask for clarification or be honest when it does not know.
 
-## Self-hosted generative model (optional)
+## Generative model: Cloudflare Workers AI
 
-To enable genuine generative responses without Gemini/Groq or another third-party
-AI provider, run an OpenAI-compatible inference server that you own/control
-(for example, a local model server on your own device or private server), then
-configure these environment variables on this service:
+The service can use Cloudflare-hosted GLM-4.7-Flash for genuine generative
+multilingual replies. The model runs on Cloudflare, not inside the small
+EthioDeploy container. Configure these environment variables on EthioDeploy:
+
+- `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID.
+- `CLOUDFLARE_API_TOKEN`: a secret API token with permission to run Workers AI.
+- `ALEXA_CLOUDFLARE_MODEL`: optional model ID; defaults to
+  `@cf/zai-org/glm-4.7-flash`.
+
+The adapter sends the multilingual Alexa system prompt and recent conversation
+context to Cloudflare. If Cloudflare credentials are absent or the request fails,
+it tries the optional self-hosted endpoint below, then the offline conversation
+engine. Never put Cloudflare credentials in source code or share them publicly.
+
+### Optional self-hosted model
+
+For an OpenAI-compatible inference server that you operate, configure:
 
 - `ALEXA_LOCAL_MODEL_URL`: base URL, `/v1`, or full
-  `/v1/chat/completions` endpoint for your self-hosted inference server.
-- `ALEXA_LOCAL_MODEL_NAME`: model identifier expected by that server (default
-  `local-model`).
-- `ALEXA_LOCAL_MODEL_TOKEN`: optional bearer token for a protected endpoint.
-- `ALEXA_LOCAL_MODEL_TIMEOUT`: request timeout in seconds (default 35; capped at 90).
+  `/v1/chat/completions` endpoint.
+- `ALEXA_LOCAL_MODEL_NAME`: exact model identifier expected by that server.
+- `ALEXA_LOCAL_MODEL_TOKEN`: optional bearer token.
+- `ALEXA_LOCAL_MODEL_TIMEOUT`: timeout in seconds (default 35; capped at 90).
 
-The adapter sends the recent conversation context and a multilingual Alexa
-system prompt. Only `user` and `assistant` history roles are forwarded. If the
-model endpoint is unset or unreachable, the existing offline engine answers
-instead. The adapter itself does not download model weights or create a hosted
-model: the inference server and its compute must be supplied separately. Do not
-expose a phone/server inference port publicly without authentication and a
-secure private connection.
+The local adapter does not download model weights or create a hosted model.
 
 ## API
 
@@ -73,16 +79,22 @@ If `ALEXA_AI_TOKEN` is set, POST requests require
 - Set the service root directory to `alexa_own_ai` if the deployment UI asks.
 - Build with the included Dockerfile or run `python app.py`.
 - Use the platform-provided `PORT` value (default is 3000).
-- Set `ALEXA_AI_TOKEN` as a secret and use the same value in the bot's
-  `ALEXA_OWN_AI_API_KEY` setting.
+- Keep `ALEXA_AI_TOKEN` as a secret and use the same value in the bot's
+  `ALEXA_OWN_AI_API_KEY` setting. This protects the Alexa microservice API.
+- Add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` as separate secrets
+  to enable the hosted GLM model. The existing `ALEXA_AI_TOKEN` is not a
+  Cloudflare model credential.
+- Optionally set `ALEXA_CLOUDFLARE_MODEL` to
+  `@cf/zai-org/glm-4.7-flash`; this is also the built-in default.
 - Set `ALEXA_AI_DB_PATH` to a file on a persistent volume if EthioDeploy offers
   one. The default is `alexa_memory.sqlite3` in the application directory.
   SQLite data can survive process restarts, but it cannot survive container
   replacement/redeployment unless that path is backed by persistent storage.
 
-The service is intentionally lightweight for a 256 MB environment. A real
-generative model needs substantially more RAM and compute. This service does
-not silently call Gemini, Groq, or any other external AI provider.
+The service remains lightweight for a 256 MB environment because inference is
+performed by Cloudflare when configured. Cloudflare usage may be subject to
+account limits and pricing. Without Cloudflare credentials or a working local
+model endpoint, the offline conversational engine remains active.
 
 ## ZIP artifact
 

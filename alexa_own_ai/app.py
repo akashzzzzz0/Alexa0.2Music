@@ -28,9 +28,9 @@ except ImportError:  # support direct execution: python app.py
     from conversation_brain import respond as conversation_respond
 
 try:
-    from .model_runtime import generate as local_model_generate
+    from .model_runtime import generate as local_model_generate, status as model_runtime_status
 except ImportError:
-    from model_runtime import generate as local_model_generate
+    from model_runtime import generate as local_model_generate, status as model_runtime_status
 
 PORT = int(os.getenv("PORT", "3000"))
 API_TOKEN = os.getenv("ALEXA_AI_TOKEN", "")
@@ -394,7 +394,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-local-context", "is_llm": False, "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
+            model_status = model_runtime_status()
+            return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_last_20"})
         return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
 
     def do_POST(self):
@@ -420,7 +421,8 @@ class Handler(BaseHTTPRequestHandler):
             history = get_history(conversation, supplied, message)
             reply = response_for(message, history)
             save_turns(conversation, message, reply)
-            return self.send_json(200, {"reply": reply, "fallback": False, "provider": "alexa-own-ai-micro", "is_llm": False, "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
+            model_status = model_runtime_status()
+            return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2)})
 
         messages = body.get("messages", [])
         if not isinstance(messages, list): messages = []

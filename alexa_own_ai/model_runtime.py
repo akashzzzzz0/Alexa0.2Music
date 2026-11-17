@@ -1,16 +1,14 @@
-"""Optional adapter for a self-hosted OpenAI-compatible local language model.
-
-The model is hosted by the operator (for example, on their own device/server).
-No third-party AI provider is selected or contacted by this module.
-"""
+"""Optional hosted and self-hosted LLM adapters for Alexa Own AI."""
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_TIMEOUT = 35
 MAX_CONTEXT_MESSAGES = 20
 MAX_MESSAGE_CHARS = 6000
+DEFAULT_CLOUDFLARE_MODEL = "@cf/zai-org/glm-4.7-flash"
 
 
 def _endpoint(base_url):
@@ -24,20 +22,28 @@ def _endpoint(base_url):
     return value + "/v1/chat/completions"
 
 
-def generate(message, history):
-    """Return a model reply, or None when no local model is configured/unavailable."""
-    endpoint = _endpoint(os.getenv("ALEXA_LOCAL_MODEL_URL", ""))
-    if not endpoint or not str(message or "").strip():
-        return None
+def status():
+    """Describe configured model routes without exposing credentials."""
+    cf_ready = bool(
+        os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+        and os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    )
+    local_ready = bool(os.getenv("ALEXA_LOCAL_MODEL_URL", "").strip())
+    model = (
+        os.getenv("ALEXA_CLOUDFLARE_MODEL", DEFAULT_CLOUDFLARE_MODEL).strip()
+        if cf_ready else
+        os.getenv("ALEXA_LOCAL_MODEL_NAME", "local-model").strip()
+        if local_ready else None
+    )
+    return {
+        "is_llm": cf_ready or local_ready,
+        "provider": "cloudflare-workers-ai" if cf_ready else "self-hosted" if local_ready else None,
+        "model": model,
+        "configured": cf_ready or local_ready,
+    }
 
-    model_name = os.getenv("ALEXA_LOCAL_MODEL_NAME", "local-model")
-    token = os.getenv("ALEXA_LOCAL_MODEL_TOKEN", "")
-    try:
-        timeout = float(os.getenv("ALEXA_LOCAL_MODEL_TIMEOUT", str(DEFAULT_TIMEOUT)))
-    except (TypeError, ValueError):
-        timeout = DEFAULT_TIMEOUT
-    timeout = min(max(timeout, 3), 90)
 
+def _messages(message, history):
     system_prompt = (
         "You are Alexa, a friendly, natural conversational assistant. "
         "Understand meaning, intent, tone, teasing, sarcasm, typos, incomplete "
@@ -54,18 +60,75 @@ def generate(message, history):
     for item in (history or [])[-MAX_CONTEXT_MESSAGES:]:
         if not isinstance(item, dict):
             continue
-        role = item.get("role")
-        content = item.get("content")
+        role, content = item.get("role"), item.get("content")
         if role not in ("user", "assistant") or not isinstance(content, str):
             continue
         content = content.strip()
         if content:
             messages.append({"role": role, "content": content[:MAX_MESSAGE_CHARS]})
     messages.append({"role": "user", "content": str(message).strip()[:MAX_MESSAGE_CHARS]})
+    return messages
 
+
+def _timeout():
+    try:
+        value = float(os.getenv("ALEXA_LOCAL_MODEL_TIMEOUT", str(DEFAULT_TIMEOUT)))
+    except (TypeError, ValueError):
+        value = DEFAULT_TIMEOUT
+    return min(max(value, 3), 90)
+
+
+def _cloudflare_generate(messages):
+    account = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    if not account or not token:
+        return None
+    model = os.getenv("ALEXA_CLOUDFLARE_MODEL", DEFAULT_CLOUDFLARE_MODEL).strip()
+    if not model:
+        model = DEFAULT_CLOUDFLARE_MODEL
+    encoded_model = urllib.parse.quote(model, safe="@/")
+    url = "https://api.cloudflare.com/client/v4/accounts/{}/ai/run/{}".format(
+        urllib.parse.quote(account, safe=""), encoded_model
+    )
+    payload = json.dumps({
+        "messages": messages,
+        "max_tokens": 500,
+        "temperature": 0.7,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_timeout()) as response:
+            result = json.loads(response.read(1_000_000).decode("utf-8"))
+        if not isinstance(result, dict) or result.get("success") is False:
+            return None
+        data = result.get("result", result)
+        answer = data.get("response") if isinstance(data, dict) else None
+        if not isinstance(answer, str) and isinstance(data, dict):
+            choices = data.get("choices", [])
+            if choices and isinstance(choices[0], dict):
+                answer = choices[0].get("message", {}).get("content")
+        answer = answer.strip() if isinstance(answer, str) else ""
+        return answer[:8000] if answer else None
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _local_generate(message, history):
+    endpoint = _endpoint(os.getenv("ALEXA_LOCAL_MODEL_URL", ""))
+    if not endpoint:
+        return None
+    model_name = os.getenv("ALEXA_LOCAL_MODEL_NAME", "local-model")
+    token = os.getenv("ALEXA_LOCAL_MODEL_TOKEN", "")
     payload = json.dumps({
         "model": model_name,
-        "messages": messages,
+        "messages": _messages(message, history),
         "temperature": 0.7,
         "max_tokens": 400,
     }).encode("utf-8")
@@ -74,9 +137,7 @@ def generate(message, history):
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            if response.status < 200 or response.status >= 300:
-                return None
+        with urllib.request.urlopen(request, timeout=_timeout()) as response:
             result = json.loads(response.read(1_000_000).decode("utf-8"))
         choices = result.get("choices", []) if isinstance(result, dict) else []
         if not choices or not isinstance(choices[0], dict):
@@ -93,3 +154,14 @@ def generate(message, history):
         return content[:8000] if content else None
     except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def generate(message, history):
+    """Try Cloudflare Workers AI, then an optional self-hosted OpenAI-compatible model."""
+    if not str(message or "").strip():
+        return None
+    messages = _messages(message, history)
+    answer = _cloudflare_generate(messages)
+    if answer:
+        return answer
+    return _local_generate(message, history)
