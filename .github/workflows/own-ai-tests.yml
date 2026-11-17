@@ -22,6 +22,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile service modules
-        run: python -m py_compile app.py bootstrap.py ai_router.py conversation_brain.py deep_understanding.py model_runtime.py
+        run: python -m py_compile app.py bootstrap.py ai_router.py conversation_brain.py deep_understanding.py context_envelope.py model_runtime.py
       - name: Run regression tests
         run: python -m unittest discover -v
