@@ -95,6 +95,15 @@ def respond(message, normalized, language, history):
         return ("Yes, all good here. I was right here—how are you?" if not roman
                 else "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?")
 
+    # Repair a short correction after Alexa has already asked the user to rephrase.
+    # Do not repeat the same clarification; acknowledge and continue naturally.
+    if re.search(r"\\b(nhi|nahi|nahin|no)\\b", t) and re.search(r"\\b(ese|aise|aisay|is tarah|normal|samj|samajh)\\w*\\b", t):
+        if any(k in prev for k in ("rephrase", "doosre", "context", "samajh", "listening", "words")):
+            return "Haan, ab samajh gayi. Tum normal baat karo, main follow kar rahi hoon."
+    # Handle common shortened Roman Urdu spelling and incomplete greetings.
+    if re.fullmatch(r"(kese|kaise|kaisay) ha(n)?", t):
+        return "Main theek hoon, tum sunao? 😊"
+
     # Conversational repair: understand why the user is asking for clarification.
     if re.search(r"\b(kya matlab|matlab kya|what do you mean|meaning kya|kis liye|kyun poocha|why ask)\b", t):
         return bank["meaning"]
