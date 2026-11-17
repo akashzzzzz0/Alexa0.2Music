@@ -333,10 +333,10 @@ def response_for(message, history):
         return r["yes"]
     if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
         return r["no"]
-    if re.search(r"\b(time kya|what time|current time|waqt kya|samay kya|kinna time)\b", t):
+    if re.search(r"\b(time kya|abhi time|abhi kitne? baje|kitna time|what time|current time|time now|waqt kya|abhi waqt|samay kya|kinna time)\b", t):
         now = india_now().strftime("%I:%M %p IST")
         return ("It is " if lang == "en" else "Hun time " if lang == "pa" else "Abhi time ") + now + "."
-    if re.search(r"\b(today date|aaj date|date kya|what date|aaj ki tareekh|ajj di tareekh)\b", t):
+    if re.search(r"\b(today date|date today|aaj date|aaj ki date|date kya|what date|what is the date|today.s date|aaj ki tareekh|ajj di tareekh|tareekh kya|aaj ka din|which day is it|what day is it)\b", t):
         today = india_now().strftime("%A, %d %B %Y")
         return ("Today's date is " if lang == "en" else "Ajj di tareekh " if lang == "pa" else "Aaj ki tareekh ") + today + "."
     # Short conversational turns need context-sensitive replies, not the same
