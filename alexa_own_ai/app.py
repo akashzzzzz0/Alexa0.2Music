@@ -380,11 +380,22 @@ def save_turns(conversation, user_text, reply):
             conn.execute("INSERT INTO turns(conversation, role, content, created_at) VALUES(?,?,?,?)", (conversation, "assistant", reply[:4000], dt.datetime.now(dt.timezone.utc).isoformat()))
             conn.execute("DELETE FROM turns WHERE conversation=? AND seq NOT IN (SELECT seq FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?)", (conversation, conversation, MAX_HISTORY))
 
+def _is_compound_message(text):
+    """Detect multi-clause chat that must not be swallowed by a single-intent fallback."""
+    parts = re.split(r"\\b(?:aur|and|but|lekin|magar|also)\\b", str(text or ""), flags=re.IGNORECASE)
+    meaningful_parts = [part for part in parts if len(part.split()) >= 3]
+    if len(meaningful_parts) < 2:
+        return False
+    # Keep expressions for the exact local calculator on their existing path.
+    return not re.search(r"\\d\\s*[+*/%\\-]\\s*\\d", str(text or ""))
+
+
 def response_for(message, history, context=None):
     raw = str(message or "").strip()
     lang = detect_language(raw)
     t = normalize(raw)
     r = REPLIES[lang]
+    model_attempted = False
 
     # The local conversation brain handles clear dialogue intents first.
     # Open-ended messages continue through deterministic app intents and then
@@ -400,6 +411,14 @@ def response_for(message, history, context=None):
         brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
+
+    # Compound messages must reach the model intact before a one-intent
+    # keyword fallback can answer only one clause and silently drop the rest.
+    if _is_compound_message(t):
+        model_attempted = True
+        compound_reply = local_model_generate(raw, history, context=context)
+        if compound_reply:
+            return compound_reply
 
     # Deterministic intent and short-follow-up rules run before paid/remote inference.
 
@@ -518,7 +537,7 @@ def response_for(message, history, context=None):
         previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
     # All deterministic local intents have now been checked. Open-ended chat
     # gets exactly one bounded model attempt with the caller's context attached.
-    model_reply = local_model_generate(raw, history, context=context)
+    model_reply = None if model_attempted else local_model_generate(raw, history, context=context)
     if model_reply:
         return model_reply
 
