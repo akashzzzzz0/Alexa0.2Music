@@ -377,10 +377,9 @@ def response_for(message, history, context=None):
     t = normalize(raw)
     r = REPLIES[lang]
 
-    # The installed bootstrap router (conversation_respond) handles local
-    # dialogue matches and performs at most one hosted-model request. Calling
-    # the model here first caused a second inference attempt after a timeout.
-    # If no model is configured/available, retain the local fallback behavior.
+    # The local conversation brain handles clear dialogue intents first.
+    # Open-ended messages continue through deterministic app intents and then
+    # exactly one model-runtime call below, with the supplied context.
     if not raw:
         return r["hello"]
 
