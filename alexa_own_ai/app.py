@@ -472,7 +472,7 @@ def _is_substantive_question(text):
     if "?" in value or "؟" in value:
         return True
     # Longer natural-language turns usually carry context, emotion, or multiple clauses.
-    if len(re.findall(r"\\w+", value)) >= 6:
+    if len(re.findall(r"\w+", value)) >= 6:
         return True
     if len(re.findall(r"\b(?:1[.)]|2[.)]|3[.)]|4[.)]|5[.)])\s+", value)) >= 2:
         return True
