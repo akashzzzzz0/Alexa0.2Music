@@ -1,13 +1,12 @@
-"""Alexa Own AI HTTP API with local GGUF inference and OpenAI-compatible chat requests."""
+"""Alexa Own AI HTTP API with Cloudflare Workers AI and SQLite memory."""
 from __future__ import annotations
-import asyncio
 import logging
 import os
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from .chat import AlexaAI
 
-app = FastAPI(title="Alexa Own AI", version="7.2.1")
+app = FastAPI(title="Alexa Own AI", version="7.3.0")
 engine = AlexaAI()
 TOKEN = os.getenv("ALEXA_OWN_AI_TOKEN", "")
 logger = logging.getLogger(__name__)
@@ -46,18 +45,6 @@ def authorize(authorization: str | None):
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
-@app.on_event("startup")
-async def warm_local_model_in_background():
-    if engine.local_model.configured and not (engine.provider_url and engine.model):
-        async def _warm():
-            try:
-                await asyncio.to_thread(engine.local_model.warmup)
-                logger.info("Alexa local GGUF model is loaded and ready")
-            except Exception:
-                logger.exception("Alexa local GGUF model warmup failed")
-        app.state.model_warmup_task = asyncio.create_task(_warm())
-
-
 @app.get("/")
 async def root():
     return {"ok": True, "service": "alexa-own-ai", "health": "/health", "chat": "/chat"}
@@ -66,21 +53,15 @@ async def root():
 @app.get("/health")
 async def health():
     remote_ready = bool(engine.provider_url and engine.model)
-    local_ready = engine.local_model.configured
     return {
         "ok": True,
         "service": "alexa-own-ai",
-        "version": "7.2.1",
-        "model_configured": remote_ready or local_ready,
-        "inference_backend": "remote" if remote_ready else ("local_gguf" if local_ready else "none"),
-        "local_model_loaded": engine.local_model.loaded,
-        "local_model_state": (
-            "ready" if engine.local_model.loaded else
-            ("loading" if getattr(app.state, "model_warmup_task", None) is not None
-             and not app.state.model_warmup_task.done() else "not_loaded")
-        ),
+        "version": "7.3.0",
+        "model_configured": remote_ready,
+        "inference_backend": "remote" if remote_ready else "none",
+        "local_model_loaded": False,
+        "local_model_state": "disabled",
         "auth_enabled": bool(TOKEN),
-        "local_model_repo": engine.local_model.repo_id if local_ready else None,
         "memory": "sqlite",
         "learning": "explicit-feedback-sqlite",
     }
@@ -121,7 +102,7 @@ async def completions(payload: OpenAIChatRequest, authorization: str | None = He
             "message": {"role": "assistant", "content": result["reply"]},
             "finish_reason": "stop",
         }],
-        "model": payload.model or engine.model or engine.local_model.repo_id,
+        "model": payload.model or engine.model or "cloudflare-workers-ai",
         "metadata": {
             "language": result["language"],
             "intent": result["intent"],

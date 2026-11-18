@@ -1,6 +1,5 @@
-"""Provider-ready chat orchestration with grounded user memory and context."""
+"""Cloudflare-backed chat orchestration with SQLite memory and feedback."""
 from __future__ import annotations
-import asyncio
 import os
 import httpx
 from .memory import ConversationMemory
@@ -9,7 +8,6 @@ from .understanding import understand
 from .reasoning import build_plan
 from .reply import compose_reply
 from .personality import system_personality
-from .local_model import LocalGGUFModel
 
 
 class AlexaAI:
@@ -21,7 +19,6 @@ class AlexaAI:
         self.provider_key = os.getenv("ALEXA_AI_API_KEY", "")
         self.model = os.getenv("ALEXA_AI_MODEL", "")
         self.timeout = float(os.getenv("ALEXA_AI_TIMEOUT", "180"))
-        self.local_model = LocalGGUFModel()
 
     def _build_messages(self, message, history, parsed, plan, user_id, saved_name=None, external_system_prompt=""):
         prefs = self.learning.preferences(user_id)
@@ -53,7 +50,7 @@ class AlexaAI:
 
     async def _provider_reply(self, messages):
         if not (self.provider_url and self.model):
-            return None
+            raise RuntimeError("Cloudflare AI is not configured.")
         headers = {"Content-Type": "application/json"}
         if self.provider_key:
             headers["Authorization"] = "Bearer " + self.provider_key
@@ -129,14 +126,9 @@ class AlexaAI:
                     if hasattr(result, "__await__"):
                         result = await result
                     answer, source = str(result), "custom_responder"
-                elif self.provider_url and self.model:
-                    answer = await self._provider_reply(messages)
-                    source = "configured_model"
-                elif self.local_model.configured:
-                    answer = await asyncio.to_thread(self.local_model.reply, messages)
-                    source = "local_model"
                 else:
-                    answer, source = self._fallback(parsed), "fallback"
+                    answer = await self._provider_reply(messages)
+                    source = "cloudflare_workers_ai"
                 error = None
                 if not answer:
                     answer, source = self._fallback(parsed), "fallback"
