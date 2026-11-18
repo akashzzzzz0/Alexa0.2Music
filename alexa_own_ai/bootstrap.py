@@ -4,10 +4,8 @@ from http.server import ThreadingHTTPServer
 import app
 try:
     import model_runtime
-    from ai_router import route_response
 except ImportError:
     from . import model_runtime
-    from .ai_router import route_response
 
 
 # Keep one consistent Alexa voice for hosted inference without changing the
@@ -34,8 +32,6 @@ def _alexa_messages(message, history, context=None):
 
 
 model_runtime._messages = _alexa_messages
-app.conversation_respond = route_response
-app.CONVERSATION_ROUTER_OWNS_INFERENCE = True
 
 if __name__ == "__main__":
     print("Alexa Own AI microservice listening on port", app.PORT, flush=True)
