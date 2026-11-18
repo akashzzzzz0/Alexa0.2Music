@@ -333,6 +333,39 @@ def get_memory_items(scope):
     return {key: value for key, value in rows}
 
 
+def _extract_explicit_user_name(message):
+    """Extract a plainly stated first name; never infer a name from other text."""
+    match = re.search(
+        r"\\b(?:mera|meri|my)\\s+(?:naam|name)\\s+"
+        r"([a-z][a-z0-9_-]{1,30})"
+        r"(?:\\s+(?:hai|ha|is))?(?:\\s+(?:yaad|remember)\\b.*)?[.! ]*$",
+        str(message or "").strip(),
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    name = match.group(1).strip()
+    if name.casefold() in {"kya", "what", "hai", "ha", "is", "nahi", "nahin", "name", "naam"}:
+        return None
+    return name[:60]
+
+
+def _is_alexa_identity_question(text):
+    """Recognize direct questions about Alexa's name or purpose in Roman Urdu/English."""
+    value = normalize(text)
+    asks_name = bool(re.search(
+        r"\\b(?:tumhara|tumhari|aapka|apka|your|what is your)\\s+(?:naam|name)\\b|"
+        r"\\b(?:tumhara|tumhari|aapka|apka)\\s+name\\s+kya\\b",
+        value,
+    ))
+    asks_role = bool(re.search(
+        r"\\b(?:tumhara|tumhari|aapka|apka|your)\\s+(?:kaam|work|job|purpose)\\b|"
+        r"\\b(?:tumhara|aapka)\\s+kaam\\s+kya\\b",
+        value,
+    ))
+    return asks_name or asks_role
+
+
 def request_context(body, default_scope, message=""):
     """Combine approved memory, explicit feedback, request facts, and retrieved document excerpts."""
     # Personal long-term memory must not default to a shared group/chat ID.
@@ -345,9 +378,14 @@ def request_context(body, default_scope, message=""):
         scope = _memory_scope("user:" + str(user_identity).strip())
     else:
         scope = _memory_scope(default_scope)
+    memory_updates = body.get("memory_updates")
+    memory_updates = dict(memory_updates) if isinstance(memory_updates, dict) else {}
+    stated_name = _extract_explicit_user_name(message)
+    if stated_name:
+        memory_updates["name"] = stated_name
     memory_result = save_memory_items(
         scope,
-        updates=body.get("memory_updates"),
+        updates=memory_updates,
         forget_keys=body.get("forget_memory_keys"),
         forget_all=body.get("forget_all_memory") is True,
     )
@@ -491,12 +529,23 @@ def response_for(message, history, context=None):
     if not raw:
         return r["hello"]
 
-    # Answer personal-name questions from explicit history/memory only. Never guess.
+    # Confirm a plainly stated name after request_context has persisted it.
+    stated_name = _extract_explicit_user_name(raw)
+    if stated_name:
+        return ("Got it, I'll remember your name is " + stated_name + "."
+                if lang == "en" else "Theek hai, " + stated_name + " naam yaad rakhungi.")
+
+    # Answer direct questions about Alexa herself without depending on an LLM.
     if _is_name_question(t):
         known_name = _known_user_name(history, context=context)
         if known_name:
             return ("Your name is " if lang == "en" else "Tumhara naam ") + known_name + "."
         return "Tumne abhi tak apna naam nahi bataya. Bata do, phir main sahi naam yaad rakh sakungi."
+
+    if _is_alexa_identity_question(t):
+        if lang == "en":
+            return "My name is Alexa. I'm your assistant, and my job is to understand your messages and help with questions, conversation, and tasks."
+        return "Mera naam Alexa hai. Main tumhari assistant hoon. Mera kaam tumhari baat samajhna, sawalon ke jawab dena aur zaroori kaamon mein madad karna hai."
 
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
