@@ -116,9 +116,35 @@ def detect_language(raw):
     if script == "ur":
         return "ur"
     t = normalize(raw)
-    # Only two reply modes: English, or Roman Hindi/Urdu.
-    # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
-    if re.search(r"\b(the|is|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|my|do|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
+    # Choose the dominant language in mixed Latin-script messages instead of
+    # letting one English keyword override an otherwise Roman Urdu sentence.
+    tokens = set(re.findall(r"[a-z']+", t))
+    english_markers = {
+        "the", "is", "you", "your", "what", "why", "how", "hello", "hey",
+        "please", "thanks", "thank", "can", "will", "would", "should",
+        "this", "that", "i", "we", "they", "where", "when", "who", "doing",
+        "good", "morning", "evening", "today", "tomorrow", "because", "about",
+        "with", "from", "for", "my", "did", "have", "has", "had", "am", "was",
+        "were", "it", "to", "of", "on", "in", "at", "and", "or", "but", "not",
+        "just", "tell", "say", "something", "there", "here", "yes", "yeah",
+        "yep", "yup", "no", "nope", "ok", "okay",
+    }
+    roman_urdu_markers = {
+        "main", "mai", "mujhe", "mera", "meri", "mere", "tum", "tumhe",
+        "tumhein", "aap", "apko", "apka", "kya", "kyun", "kyu", "kaise",
+        "kaisa", "kaisi", "kab", "kahan", "kidhar", "kon", "kaun", "hai",
+        "hain", "ho", "haan", "han", "nahi", "nahin", "nhi", "acha",
+        "achha", "theek", "thik", "aur", "lekin", "magar", "batao", "btao",
+        "samjhao", "samjha", "kar", "karo", "kro", "chahiye", "chaiye",
+        "dila", "doon", "karo", "raha", "rahi", "rahe", "tha", "thi",
+        "wala", "wali", "wale", "ka", "ki", "ke", "ko", "se", "mein",
+        "me", "par", "abhi", "aaj", "kal", "kyunke", "kyunki",
+    }
+    english_score = len(tokens & english_markers)
+    roman_urdu_score = len(tokens & roman_urdu_markers)
+    if roman_urdu_score and roman_urdu_score >= english_score:
+        return "ur"
+    if english_score:
         return "en"
     return "ur"
 
@@ -309,7 +335,16 @@ def get_memory_items(scope):
 
 def request_context(body, default_scope, message=""):
     """Combine approved memory, explicit feedback, request facts, and retrieved document excerpts."""
-    scope = _memory_scope(body.get("memory_scope") or default_scope)
+    # Personal long-term memory must not default to a shared group/chat ID.
+    # Prefer an explicit scope; otherwise isolate by the sending user when known.
+    explicit_scope = body.get("memory_scope")
+    user_identity = body.get("user_id") or body.get("from_user_id")
+    if explicit_scope:
+        scope = _memory_scope(explicit_scope)
+    elif user_identity is not None and str(user_identity).strip():
+        scope = _memory_scope("user:" + str(user_identity).strip())
+    else:
+        scope = _memory_scope(default_scope)
     memory_result = save_memory_items(
         scope,
         updates=body.get("memory_updates"),
@@ -371,16 +406,26 @@ def save_turns(conversation, user_text, reply):
             conn.execute("INSERT INTO turns(conversation, role, content, created_at) VALUES(?,?,?,?)", (conversation, "assistant", reply[:4000], dt.datetime.now(dt.timezone.utc).isoformat()))
             conn.execute("DELETE FROM turns WHERE conversation=? AND seq NOT IN (SELECT seq FROM turns WHERE conversation=? ORDER BY seq DESC LIMIT ?)", (conversation, conversation, MAX_HISTORY))
 
+def _is_compound_message(text):
+    """Detect multi-clause chat that must not be swallowed by a single-intent fallback."""
+    parts = re.split(r"\b(?:aur|and|but|lekin|magar|also)\b", str(text or ""), flags=re.IGNORECASE)
+    meaningful_parts = [part for part in parts if len(part.split()) >= 3]
+    if len(meaningful_parts) < 2:
+        return False
+    # Keep expressions for the exact local calculator on their existing path.
+    return not re.search(r"\d\s*[+*/%\-]\s*\d", str(text or ""))
+
+
 def response_for(message, history, context=None):
     raw = str(message or "").strip()
     lang = detect_language(raw)
     t = normalize(raw)
     r = REPLIES[lang]
+    model_attempted = False
 
-    # The installed bootstrap router (conversation_respond) handles local
-    # dialogue matches and performs at most one hosted-model request. Calling
-    # the model here first caused a second inference attempt after a timeout.
-    # If no model is configured/available, retain the local fallback behavior.
+    # The local conversation brain handles clear dialogue intents first.
+    # Open-ended messages continue through deterministic app intents and then
+    # exactly one model-runtime call below, with the supplied context.
     if not raw:
         return r["hello"]
 
@@ -392,6 +437,14 @@ def response_for(message, history, context=None):
         brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
+
+    # Compound messages must reach the model intact before a one-intent
+    # keyword fallback can answer only one clause and silently drop the rest.
+    if _is_compound_message(t):
+        model_attempted = True
+        compound_reply = local_model_generate(raw, history, context=context)
+        if compound_reply:
+            return compound_reply
 
     # Deterministic intent and short-follow-up rules run before paid/remote inference.
 
@@ -463,8 +516,12 @@ def response_for(message, history, context=None):
         prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
         if "joke" in prior or "mazak" in prior:
             return r["joke"]
-        return r["yes"]
-    if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
+        if not history:
+            return r["yes"]
+        # An affirmative with conversation history answers the previous turn.
+        # Let the model resolve what was agreed to instead of returning a
+        # context-free "tell me more" line.
+    if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t) and not history:
         return r["no"]
     if re.search(r"\b(time kya|abhi time|abhi kitne? baje|kitna time|what time|current time|time now|waqt kya|abhi waqt|samay kya|kinna time)\b", t):
         now = india_now().strftime("%I:%M %p IST")
@@ -504,19 +561,13 @@ def response_for(message, history, context=None):
     if history:
         last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
         previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
-    # Give unresolved contextual messages one bounded model attempt before
-    # the generic local fallback. Deterministic intents above stay local, while
-    # short follow-ups and open chat can use the supplied conversation history.
-    model_reply = local_model_generate(raw, history)
+    # All deterministic local intents have now been checked. Open-ended chat
+    # gets exactly one bounded model attempt with the caller's context attached.
+    model_reply = None if model_attempted else local_model_generate(raw, history, context=context)
     if model_reply:
         return model_reply
 
-    # Do not let a generic short-follow-up rule swallow real questions.
-    # The model must see the recent dialogue so it can resolve "why?", "meaning?",
-    # references, and incomplete Roman Urdu messages from their actual context.
-    # The model was already tried before deterministic fallback rules above.
-    # Only use a clarification fallback when no generative model is configured
-    # or the provider is temporarily unavailable.
+    # If inference is unavailable, use a concise language-matched fallback.
     if lang == "en":
         return "I'm listening. Tell me a little more about what you mean."
     if lang == "pa":

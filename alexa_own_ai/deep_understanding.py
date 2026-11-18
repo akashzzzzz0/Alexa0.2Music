@@ -25,17 +25,17 @@ _EMOJI_GROUPS = (
 _CORRECTION = (
     r"\b(no|nahi|nahin|nhi|galat|wrong|mera matlab|mera kehna|"
     r"matlab ye|matlab yeh|maine kaha|i meant|i mean|that's not|"
-    r"that is not|not what i meant|you misunderstood|samjho)\b"
+    r"that is not|not what i meant|you misunderstood|samjho|نہیں|غلط|میرا مطلب|میں نے کہا|آپ نے غلط سمجھا)\b"
 )
 _QUESTION = (
     r"\b(what|why|when|where|who|which|how|kya|kyun|kiun|kaise|kaisa|"
-    r"kab|kahan|kidhar|kon|kaun|matlab|mtlb|kis tarah|kitna|kitni)\b"
+    r"kab|kahan|kidhar|kon|kaun|matlab|mtlb|kis tarah|kitna|kitni|کیا|کیوں|کیسے|کب|کہاں|کون|کتنا|کتنی|مطلب|کس طرح)\b"
 )
 _REQUEST = (
     r"\b(please|plz|can you|could you|would you|help me|batao|btao|"
     r"samjhao|samjha do|samjha|karo|kro|kar do|kardo|kr do|"
     r"bana do|bna do|fix karo|fix kro|theek karo|thik karo|"
-    r"likh do|likh do|explain|tell me|show me|chahiye|zaroorat hai)\b"
+    r"likh do|likh do|explain|tell me|show me|chahiye|zaroorat hai|براہ کرم|مدد کرو|مدد کریں|بتاؤ|بتائیں|سمجھاؤ|سمجھائیں|کر دو|بنا دو|لکھ دو|چاہیے)\b"
 )
 _REFERENCE = (
     r"\b(it|that|this|same|ye|yeh|wo|woh|wahi|wohi|us|usne|iska|"
@@ -106,14 +106,14 @@ def analyze(message, history):
     frustration = bool(re.search(
         r"\b(annoyed|angry|frustrated|bakwas|kya yaar|samajh nahi|"
         r"samajh nhi|nahi samajhte|not listening|not understanding|"
-        r"useless|wtf|pareshan kar diya)\b", text
+        r"useless|wtf|pareshan kar diya|بکواس|سمجھ نہیں|پریشان کر دیا|غصہ|ناراض)\b", text
     ))
     playful = bool(re.search(
         r"\b(lol|lmao|haha|hehe|mazak|mazaak|majak|mazaq)\b", text
     ))
     emotional = bool(re.search(
         r"\b(sad|udaas|pareshan|worried|tension|happy|khush|excited|"
-        r"hurt|dukhi|pareshani|ghussa|gussa|naraz|naraaz)\b", text
+        r"hurt|dukhi|pareshani|ghussa|gussa|naraz|naraaz|اداس|پریشان|خوش|دکھی|فکر|غصہ|ناراض)\b", text
     ))
     praise = bool(re.search(
         r"\b(great|amazing|excellent|strong|best|brilliant|smart|leadership|"
@@ -130,7 +130,7 @@ def analyze(message, history):
     ))
     negation = bool(re.search(
         r"\b(no|not|never|don't|doesn't|didn't|nahi|nahin|nhi|mat|"
-        r"bilkul nahi|aisa nahi|aise nahi)\b", text
+        r"bilkul nahi|aisa nahi|aise nahi|نہیں|مت|ہرگز نہیں)\b", text
     ))
     short = len(words) <= 4
     refers_back = bool(re.search(_REFERENCE, text))
