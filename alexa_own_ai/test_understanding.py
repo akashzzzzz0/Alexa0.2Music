@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import app
 from model_runtime import _messages
+from deep_understanding import analyze
 
 
 class UnderstandingRoutingTests(unittest.TestCase):
