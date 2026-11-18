@@ -60,16 +60,13 @@ def respond(message, normalized, language, history, context=None):
     if text == "aur" and history:
         return "Main sun rahi hoon, aage batao."
 
+    # Only an explicit farewell should trigger a sign-off. A message may discuss
+    # "kal wali baat" (yesterday/tomorrow's topic) without ending the chat.
     farewell = re.search(
-        r"\b(good\s*night|gn|nighty\s*night|sleep\s*well|sweet\s*dreams|allah\s*hafiz|khuda\s*hafiz)\b",
+        r"\b(good\s*night|gn|nighty\s*night|sleep\s*well|sweet\s*dreams|allah\s*hafiz|khuda\s*hafiz|bye|goodbye|see\s+you)\b",
         text,
     )
-    tomorrow = re.search(r"\b(tomorrow|kal|next\s*day)\b", text)
-    signoff = re.search(
-        r"\b(bye|goodbye|see\s+you|meet|milte|milenge|talk|chat|baat|phir\s+mil|then|okay|ok)\b",
-        text,
-    )
-    if farewell or (tomorrow and signoff):
+    if farewell:
         if language == "en":
             return "Good night! Sleep well. We'll talk tomorrow. Take care! 😊"
         return "Good night! Aaram se sona. Kal phir baat karenge. Apna khayal rakhna! 😊"
