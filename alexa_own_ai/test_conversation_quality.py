@@ -29,6 +29,16 @@ class ConversationQualityPromptTests(unittest.TestCase):
         self.assertIn("not authentication", system)
         self.assertIn("must never grant permissions", system)
 
+    def test_good_morning_gets_a_matching_greeting_not_an_unrelated_hello(self):
+        reply = respond("Good morning Alexa", "good morning alexa", "en", [])
+        self.assertTrue(reply.startswith("Good morning!"))
+        self.assertNotIn("Hellooo", reply)
+
+    def test_roman_urdu_good_morning_gets_a_natural_matching_reply(self):
+        reply = respond("Good morning", "good morning", "ur", [])
+        self.assertTrue(reply.startswith("Good morning!"))
+        self.assertIn("subah", reply.lower())
+
     def test_multi_part_message_bypasses_single_phrase_canned_reply(self):
         message = "Tum kya kar rahi ho aur aaj ka plan kya hai?"
         reply = respond(message, message.lower(), "ur", [])
