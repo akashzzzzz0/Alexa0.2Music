@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python311", "cmake", "gcc", "gnumake", "pkg-config"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --upgrade pip",
+  "CMAKE_ARGS='-DGGML_NATIVE=OFF' CMAKE_BUILD_PARALLEL_LEVEL=2 python -m pip install --prefer-binary -r requirements.txt"
+]
+
+[start]
+cmd = "uvicorn own_ai.main:app --host 0.0.0.0 --port ${PORT:-8000}"
