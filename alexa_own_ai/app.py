@@ -379,18 +379,6 @@ def response_for(message, history, context=None):
     if not raw:
         return r["hello"]
 
-    # Keep emoji-only input intact for contextual dialogue matching; normalize()
-    # intentionally strips symbols for word-based intent rules.
-    if context is None:
-        brain_reply = conversation_respond(raw, t or raw, lang, history)
-    else:
-        brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
-    if brain_reply:
-        return brain_reply
-
-    # Deterministic intent and short-follow-up rules run before paid/remote inference.
-
-    # Natural Roman Hindi/Urdu small talk and conversational repair.
     # Recognize casual statements that the user has just woken up. This is
     # ordinary small talk, not an unclear request; keep it natural even when
     # the hosted model is unavailable.
@@ -406,6 +394,19 @@ def response_for(message, history, context=None):
         if lang == "pa":
             return "Achha ji, hunay uthey o? Good morning! Neend poori hoi?"
         return "Achha, abhi abhi uthey ho? Good morning! Neend puri hui?"
+
+    # Keep emoji-only input intact for contextual dialogue matching; normalize()
+    # intentionally strips symbols for word-based intent rules.
+    if context is None:
+        brain_reply = conversation_respond(raw, t or raw, lang, history)
+    else:
+        brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
+    if brain_reply:
+        return brain_reply
+
+    # Deterministic intent and short-follow-up rules run before paid/remote inference.
+
+    # Natural Roman Hindi/Urdu small talk and conversational repair.
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
     if re.search(r"\b(kis|kaun se|kon se)\b", t) and re.search(r"\b(alfaz|lafz|ilfaz|words|tarah)\b", t) and re.search(r"\b(samj|samajh|samjhe|samjha)\w*\b", t):
