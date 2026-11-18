@@ -6,7 +6,7 @@ This is the existing Alexa Own AI service inside the Alexa0.2Music repository. I
 
 - Local inference by default using the official Apache-2.0 Qwen3 4B GGUF model.
 - Model weights are downloaded from Hugging Face on first inference and cached locally.
-- CPU-only llama.cpp inference; defaults to 2 threads and an 8K context.
+- CPU-only llama.cpp inference; memory-conscious defaults are 1 thread, 2K context, 64-token batch, and 256 output tokens.
 - Optional OpenAI-compatible remote provider remains supported and takes priority when configured.
 - SQLite conversation history, per-user saved-name memory, and explicit feedback preferences.
 - Urdu script, Roman Urdu and English handling.
@@ -25,14 +25,16 @@ Set these service variables (do not commit secrets):
 - `ALEXA_LOCAL_MODEL_ENABLED=true`
 - `ALEXA_LOCAL_MODEL_REPO=Qwen/Qwen3-4B-GGUF`
 - `ALEXA_LOCAL_MODEL_FILE=Qwen3-4B-Q4_K_M.gguf`
-- `ALEXA_LOCAL_MODEL_THREADS=2`
-- `ALEXA_LOCAL_MODEL_CONTEXT=8192`
+- `ALEXA_LOCAL_MODEL_THREADS=1`
+- `ALEXA_LOCAL_MODEL_CONTEXT=2048`
+- `ALEXA_LOCAL_MODEL_BATCH=64`
+- `ALEXA_LOCAL_MODEL_MAX_TOKENS=256`
 - `HF_HOME=/data/huggingface` (only if /data is a persistent writable volume)
 - `ALEXA_AI_MEMORY_DB=/data/alexa_own_ai_memory.sqlite3` (only if /data is persistent)
 - `ALEXA_AI_LEARNING_DB=/data/alexa_own_ai_learning.sqlite3` (only if /data is persistent)
 - `ALEXA_OWN_AI_TOKEN` = a long random secret shared privately with the Telegram bot.
 
-The first inference downloads the public GGUF model (about 1.83 GB) and loads it, so the first request can take noticeably longer. Later requests reuse the cached model. Keep a persistent volume mounted if the host supports one; otherwise model downloads and SQLite data may be lost when the container is recreated.
+The first startup downloads the public GGUF model (about 1.83 GB) and loads it, so startup can take noticeably longer. The 4B model weights alone need substantially more than 256 MB of RAM; reducing context/batch lowers overhead but cannot make this model fit a 256 MB memory limit. Later requests reuse the cached model. Keep a persistent volume mounted if the host supports one; otherwise model downloads and SQLite data may be lost when the container is recreated.
 
 ## FadeHost Telegram bot
 
