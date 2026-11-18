@@ -105,13 +105,19 @@ stickers, images, GIFs, or voice files.
   can add guidance to future prompts; this is preference aggregation, not
   model fine-tuning or autonomous code changes.
 - The caller may pass `decision_context` with `is_group`, `addressed`,
-  `mentioned`, `replied_to`, and `allow_reactions` booleans. The response
-  includes a decision recommendation: `reply`, `react`, or `silence`.
-  Reactions are disabled unless the caller explicitly enables them.
-- Decision metadata is advisory. The Telegram integration must honor it to
-  suppress a reply or apply a reaction; this service does not send Telegram
-  messages or reactions itself. Without group context, the API defaults to
-  recommending a reply.
+  `mentioned`, `replied_to`, `bot_name_mentioned`, `username_mentioned`,
+  `reply_to_bot`, and `allow_reactions` booleans. For group chats, the caller
+  must set an addressing flag only after verifying that the message names or
+  mentions Alexa, or replies to Alexa's own message. The response includes a
+  decision recommendation: `reply`, `react`, or `silence`.
+- For group requests with `is_group: true`, the service recommends `silence`
+  unless an explicit addressing flag is true. Silence/reaction decisions return
+  an empty assistant reply and do not store a hidden assistant turn. Reactions
+  are disabled unless the caller explicitly enables them.
+- The Telegram integration must still honor the decision and supply accurate
+  addressing flags; this service cannot inspect Telegram messages or send
+  Telegram messages/reactions itself. Without group context, the API defaults
+  to recommending a reply.
 
 ## Security and deployment
 

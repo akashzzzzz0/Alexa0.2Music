@@ -558,9 +558,12 @@ class Handler(BaseHTTPRequestHandler):
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
             context, memory_change, memory_items = request_context(body, conversation)
             history = get_history(conversation, supplied, message)
-            reply = response_for(message, history, context=context)
             decision = response_decision(message, body)
-            save_turns(conversation, message, reply)
+            # A group message that was not explicitly addressed must not
+            # trigger inference or become a hidden assistant turn in history.
+            reply = response_for(message, history, context=context) if decision["action"] == "reply" else ""
+            if reply:
+                save_turns(conversation, message, reply)
             model_status = model_runtime_status()
             return self.send_json(200, {"reply": reply, "fallback": False, "provider": model_status["provider"] or "alexa-own-ai-micro", "is_llm": model_status["is_llm"], "model": model_status["model"], "language": detect_language(message), "memory_messages": min(MAX_HISTORY, len(history)+2), "memory_items": memory_items, "memory_saved": memory_change["saved"], "memory_deleted": memory_change["deleted"], "feedback_recorded": memory_change["feedback_recorded"], "decision": decision})
 
@@ -575,10 +578,15 @@ class Handler(BaseHTTPRequestHandler):
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
         context, memory_change, memory_items = request_context(body, conversation)
         history = get_history(conversation, messages, message)
-        reply = response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
         decision = response_decision(message, body)
-        # Always return a non-empty assistant message as a completed turn.
-        save_turns(conversation, message, reply)
+        # Silence and reaction decisions must not create assistant turns or
+        # pollute the next conversation context.
+        reply = (
+            response_for(message, history, context=context) or REPLIES[detect_language(message)]["unknown"]
+            if decision["action"] == "reply" else ""
+        )
+        if reply:
+            save_turns(conversation, message, reply)
         return self.send_json(200, {
             "id": "alexa-own-ai-micro-v2", "object": "chat.completion",
             "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}],
