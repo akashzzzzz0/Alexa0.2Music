@@ -1,4 +1,4 @@
-"""Lazy local GGUF inference for a self-hosted Alexa model."""
+"""Optional local GGUF inference; disabled by default on low-memory hosts."""
 from __future__ import annotations
 
 import os
@@ -7,14 +7,16 @@ from typing import Any
 
 
 class LocalGGUFModel:
-    """Load one quantized model on first use and reuse it for later chats."""
+    """Load one quantized model only when explicitly enabled."""
 
     def __init__(self) -> None:
         self.repo_id = os.getenv("ALEXA_LOCAL_MODEL_REPO", "Qwen/Qwen3-4B-GGUF")
         self.filename = os.getenv("ALEXA_LOCAL_MODEL_FILE", "Qwen3-4B-Q4_K_M.gguf")
         self.model_path = os.getenv("ALEXA_LOCAL_MODEL_PATH", "").strip()
-        self.enabled = os.getenv("ALEXA_LOCAL_MODEL_ENABLED", "true").strip().lower() not in {
-            "0", "false", "no", "off"
+        # 4B GGUF weights cannot fit in a 256 MB service container.
+        # Remote inference is the intended low-memory mode.
+        self.enabled = os.getenv("ALEXA_LOCAL_MODEL_ENABLED", "false").strip().lower() in {
+            "1", "true", "yes", "on"
         }
         self.n_ctx = max(2048, int(os.getenv("ALEXA_LOCAL_MODEL_CONTEXT", "8192")))
         self.n_threads = max(1, int(os.getenv("ALEXA_LOCAL_MODEL_THREADS", "2")))
@@ -30,6 +32,11 @@ class LocalGGUFModel:
         return self._model is not None
 
     def _load(self):
+        if not self.configured:
+            raise RuntimeError(
+                "Local GGUF inference is disabled. Configure ALEXA_AI_BASE_URL and "
+                "ALEXA_AI_MODEL for remote inference, or explicitly enable local inference."
+            )
         if self._model is not None:
             return self._model
         with self._lock:
@@ -51,16 +58,17 @@ class LocalGGUFModel:
             if self.model_path:
                 self._model = Llama(model_path=self.model_path, **options)
             else:
-                # Public GGUF weights are downloaded once into the Hugging Face cache.
-                self._model = Llama.from_pretrained(
+                from huggingface_hub import hf_hub_download
+
+                model_path = hf_hub_download(
                     repo_id=self.repo_id,
                     filename=self.filename,
-                    **options,
                 )
+                self._model = Llama(model_path=model_path, **options)
             return self._model
 
     def warmup(self) -> None:
-        """Download and load the model before the first Telegram message arrives."""
+        """Load the optional local model before serving requests."""
         self._load()
 
     def reply(self, messages: list[dict]) -> str:
