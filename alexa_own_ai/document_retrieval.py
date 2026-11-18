@@ -24,7 +24,6 @@ _STOPWORDS = {
 def _tokens(value):
     return [
         token for token in re.findall(r"[a-z0-9_]+", str(value or "").casefold())
-                                      str(value or "").casefold())
         if len(token) > 1 and token not in _STOPWORDS
     ]
 
