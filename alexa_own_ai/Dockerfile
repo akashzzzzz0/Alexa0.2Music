@@ -12,6 +12,7 @@ COPY response_decision.py .
 COPY model_runtime.py .
 COPY ai_router.py .
 COPY bootstrap.py .
+COPY chat_ui.html .
 
 # Validate all runtime modules during image build, not after deployment.
 RUN python -m py_compile app.py conversation_brain.py deep_understanding.py context_envelope.py document_retrieval.py conversation_intelligence.py personality_profile.py feedback_learning.py response_decision.py model_runtime.py ai_router.py bootstrap.py \
