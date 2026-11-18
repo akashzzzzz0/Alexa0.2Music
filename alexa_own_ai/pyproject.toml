@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alexa-own-ai"
+version = "0.1.0"
+description = "Alexa Own AI conversational service modules"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+py-modules = [
+  "app",
+  "ai_router",
+  "bootstrap",
+  "context_envelope",
+  "conversation_brain",
+  "conversation_intelligence",
+  "deep_understanding",
+  "document_retrieval",
+  "feedback_learning",
+  "model_runtime",
+  "personality_profile",
+  "response_decision",
+]
