@@ -21,6 +21,9 @@ and optional hosted or self-hosted language-model inference.
 - Deterministic India Standard Time date/time and arithmetic handlers.
 - Optional caller-provided context for live application facts, relevant memory,
   and media descriptions/transcripts.
+- Bounded, dependency-free retrieval of relevant excerpts from caller-extracted
+  document text; irrelevant chunks are excluded and document text is treated as
+  untrusted reference data.
 
 ## Hosted model configuration
 
@@ -43,7 +46,7 @@ An optional OpenAI-compatible inference endpoint can be configured with
 - `POST /chat`
 - `POST /v1/chat/completions`
 
-Example `/chat` request:
+Example `/chat` request (optional document text must be extracted by the caller):
 
 ```json
 {
@@ -59,7 +62,10 @@ Example `/chat` request:
     ]
   },
   "memory_context": "The user prefers short Roman Urdu replies.",
-  "media_context": "Voice transcript: kal group event hai"
+  "media_context": "Voice transcript: kal group event hai",
+  "documents": [
+    {"name": "project-notes.txt", "text": "Full extracted text from the attached document"}
+  ]
 }
 ```
 
@@ -76,6 +82,12 @@ Use `forget_memory_keys` to remove selected keys, or
 response reports `memory_items`, `memory_saved`, and `memory_deleted`;
 the OpenAI-compatible response includes equivalent `x_alexa_memory` metadata.
 The `context`, `memory_context`, and `media_context` fields are optional.
+The optional `documents` field accepts up to three caller-extracted text
+documents (`name` and `text`). The service selects up to four relevant
+excerpts for the current question; it does not download Telegram attachments
+or parse PDF/DOCX files itself. The Telegram caller must safely extract text
+and pass it in this field. Document excerpts are transient and are not saved
+to conversation history or long-term memory.
 They are bounded, treated as untrusted reference data (never as instructions),
 and are not written into SQLite conversation history. Use them to pass verified
 read-only application facts, relevant memory, or text descriptions/transcripts.
