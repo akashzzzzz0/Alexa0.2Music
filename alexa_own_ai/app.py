@@ -462,8 +462,12 @@ def response_for(message, history, context=None):
         prior = " ".join(normalize(x.get("content", "")) for x in history[-MAX_HISTORY:] if isinstance(x, dict))
         if "joke" in prior or "mazak" in prior:
             return r["joke"]
-        return r["yes"]
-    if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t):
+        if not history:
+            return r["yes"]
+        # An affirmative with conversation history answers the previous turn.
+        # Let the model resolve what was agreed to instead of returning a
+        # context-free "tell me more" line.
+    if re.fullmatch(r"(no|nahi|nahin|na|nope)[!. ]*", t) and not history:
         return r["no"]
     if re.search(r"\b(time kya|abhi time|abhi kitne? baje|kitna time|what time|current time|time now|waqt kya|abhi waqt|samay kya|kinna time)\b", t):
         now = india_now().strftime("%I:%M %p IST")
