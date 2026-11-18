@@ -581,7 +581,7 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-        context, memory_change, memory_items = request_context(body, conversation)
+        context, memory_change, memory_items = request_context(body, conversation, message)
         history = get_history(conversation, messages, message)
         decision = response_decision(message, body)
         # Silence and reaction decisions must not create assistant turns or
