@@ -383,10 +383,10 @@ def response_for(message, history, context=None):
     # ordinary small talk, not an unclear request; keep it natural even when
     # the hosted model is unavailable.
     if re.search(
-        r"\\b(?:abhi|abi|abhe)\\b.{0,24}\\b(?:utha|uthi|uthe|uthaa)\\b|"
-        r"\\b(?:so\\s+)?i\\s+utha\\s+hu(?:\\s+abhi)?\\b|"
-        r"\\b(?:i\\s+)?(?:just\\s+)?woke\\s+up\\b|"
-        r"\\b(?:i\\s+)?just\\s+got\\s+up\\b",
+        r"\b(?:abhi|abi|abhe)\b.{0,24}\b(?:utha|uthi|uthe|uthaa)\b|"
+        r"\b(?:so\s+)?i\s+utha\s+hu(?:\s+abhi)?\b|"
+        r"\b(?:i\s+)?(?:just\s+)?woke\s+up\b|"
+        r"\b(?:i\s+)?just\s+got\s+up\b",
         t,
     ):
         if lang == "en":
