@@ -45,7 +45,7 @@ class AlexaAI:
               "Do not repeat greetings unnecessarily. /no_think"
         )
         if external_system_prompt:
-            system += "\\nTelegram bot persona and conversation instructions:\\n" + external_system_prompt[:12000]
+            system += "\nTelegram bot persona and conversation instructions:\n" + external_system_prompt[:12000]
         messages = [{"role": "system", "content": system}]
         messages.extend(history[-20:])
         messages.append({"role": "user", "content": message})
