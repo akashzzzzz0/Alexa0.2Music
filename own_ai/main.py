@@ -1,5 +1,7 @@
 """Alexa Own AI HTTP API with local GGUF inference and OpenAI-compatible chat requests."""
 from __future__ import annotations
+import asyncio
+import logging
 import os
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -8,6 +10,7 @@ from .chat import AlexaAI
 app = FastAPI(title="Alexa Own AI", version="7.2.1")
 engine = AlexaAI()
 TOKEN = os.getenv("ALEXA_OWN_AI_TOKEN", "")
+logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -43,6 +46,18 @@ def authorize(authorization: str | None):
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+@app.on_event("startup")
+async def warm_local_model_in_background():
+    if engine.local_model.configured and not (engine.provider_url and engine.model):
+        async def _warm():
+            try:
+                await asyncio.to_thread(engine.local_model.warmup)
+                logger.info("Alexa local GGUF model is loaded and ready")
+            except Exception:
+                logger.exception("Alexa local GGUF model warmup failed")
+        app.state.model_warmup_task = asyncio.create_task(_warm())
+
+
 @app.get("/")
 async def root():
     return {"ok": True, "service": "alexa-own-ai", "health": "/health", "chat": "/chat"}
@@ -59,6 +74,11 @@ async def health():
         "model_configured": remote_ready or local_ready,
         "inference_backend": "remote" if remote_ready else ("local_gguf" if local_ready else "none"),
         "local_model_loaded": engine.local_model.loaded,
+        "local_model_state": (
+            "ready" if engine.local_model.loaded else
+            ("loading" if not getattr(app.state, "model_warmup_task", None) is None
+             and not app.state.model_warmup_task.done() else "not_loaded")
+        ),
         "auth_enabled": bool(TOKEN),
         "local_model_repo": engine.local_model.repo_id if local_ready else None,
         "memory": "sqlite",
