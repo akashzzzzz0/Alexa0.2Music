@@ -53,6 +53,39 @@ class LongTermMemoryTests(unittest.TestCase):
         })
         self.assertEqual(app.get_memory_items("user:3"), {"favorite_topic": "technology"})
 
+    def test_default_memory_scope_is_user_isolated_inside_shared_group(self):
+        app.request_context({
+            "chat_id": "-100123",
+            "user_id": "501",
+            "memory_updates": {"preferred_language": "Roman Urdu"},
+        }, "-100123")
+        app.request_context({
+            "chat_id": "-100123",
+            "user_id": "502",
+            "memory_updates": {"preferred_language": "English"},
+        }, "-100123")
+        self.assertEqual(
+            app.get_memory_items("user:501"),
+            {"preferred_language": "Roman Urdu"},
+        )
+        self.assertEqual(
+            app.get_memory_items("user:502"),
+            {"preferred_language": "English"},
+        )
+        self.assertEqual(app.get_memory_items("-100123"), {})
+
+    def test_explicit_memory_scope_overrides_user_fallback(self):
+        app.request_context({
+            "user_id": "503",
+            "memory_scope": "custom:profile:503",
+            "memory_updates": {"reply_style": "concise"},
+        }, "-100123")
+        self.assertEqual(
+            app.get_memory_items("custom:profile:503"),
+            {"reply_style": "concise"},
+        )
+        self.assertEqual(app.get_memory_items("user:503"), {})
+
     def test_request_context_includes_saved_memory_and_reports_changes(self):
         context, change, count = app.request_context({
             "memory_updates": {"reply_language": "Roman Urdu"},
