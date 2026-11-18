@@ -35,8 +35,10 @@ except ImportError:
 
 try:
     from .context_envelope import normalize_context
+    from .document_retrieval import retrieve_document_context
 except ImportError:
     from context_envelope import normalize_context
+    from document_retrieval import retrieve_document_context
 
 try:
     from .feedback_learning import record_feedback, feedback_guidance
@@ -305,8 +307,8 @@ def get_memory_items(scope):
     return {key: value for key, value in rows}
 
 
-def request_context(body, default_scope):
-    """Combine approved memory, explicit feedback, and request facts."""
+def request_context(body, default_scope, message=""):
+    """Combine approved memory, explicit feedback, request facts, and retrieved document excerpts."""
     scope = _memory_scope(body.get("memory_scope") or default_scope)
     memory_result = save_memory_items(
         scope,
@@ -326,6 +328,9 @@ def request_context(body, default_scope):
         memory_payload["request_memory"] = request_memory
     elif isinstance(request_memory, str) and request_memory.strip():
         memory_payload["request_memory"] = request_memory.strip()[:MAX_MEMORY_VALUE_CHARS]
+    document_context = retrieve_document_context(message, body.get("documents"))
+    if document_context:
+        memory_payload["attached_document_excerpts"] = document_context
     guidance = feedback_guidance(DB_PATH, scope)
     if guidance:
         memory_payload["explicit_feedback_guidance"] = guidance
@@ -556,7 +561,7 @@ class Handler(BaseHTTPRequestHandler):
             supplied = body.get("history", [])
             if not isinstance(supplied, list): supplied = []
             conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-            context, memory_change, memory_items = request_context(body, conversation)
+            context, memory_change, memory_items = request_context(body, conversation, message)
             history = get_history(conversation, supplied, message)
             decision = response_decision(message, body)
             # A group message that was not explicitly addressed must not
@@ -576,7 +581,7 @@ class Handler(BaseHTTPRequestHandler):
                 message = content if isinstance(content, str) else ""
                 break
         conversation = str(body.get("conversation_id") or body.get("chat_id") or body.get("user_id") or body.get("session_id") or "").strip()
-        context, memory_change, memory_items = request_context(body, conversation)
+        context, memory_change, memory_items = request_context(body, conversation, message)
         history = get_history(conversation, messages, message)
         decision = response_decision(message, body)
         # Silence and reaction decisions must not create assistant turns or
