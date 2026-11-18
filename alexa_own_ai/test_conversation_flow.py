@@ -22,6 +22,25 @@ class ConversationBrainTests(unittest.TestCase):
         self.assertIn("respectfully", reply)
 
 
+class EndToEndConversationTests(unittest.TestCase):
+    def test_sample_yes_then_girlfriend_request_stays_contextual(self):
+        history = [
+            {"role": "assistant", "content": "I'm Alexa, your friendly assistant. What can I help you with?"},
+            {"role": "user", "content": "Yes"},
+        ]
+        with patch.object(app, "local_model_generate") as model:
+            first = app.response_for("Yes", history[:-1])
+            second = app.response_for("Girl friend chahiye dila do", history)
+        self.assertEqual(first, "Sure—what would you like help with?")
+        self.assertIn("kisi ko arrange nahi kar sakti", second)
+        self.assertNotIn("I'm listening", second)
+        model.assert_not_called()
+
+    def test_relationship_request_without_english_keyword(self):
+        reply = respond("Mujhe kisi se dosti shuru karni hai", "mujhe kisi se dosti shuru karni hai", "ur", [])
+        self.assertIsNone(reply)
+
+
 class InferenceFlowTests(unittest.TestCase):
     def test_open_chat_uses_exactly_one_context_aware_model_call(self):
         context = {"source": "test"}
