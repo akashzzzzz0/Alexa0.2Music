@@ -12,8 +12,16 @@ from .personality import system_personality
 class AlexaAI:
     def __init__(self,responder=None):
         self.memory=ConversationMemory(); self.learning=FeedbackLearning(); self.responder=responder
-        self.provider_url=os.getenv("ALEXA_AI_BASE_URL","").rstrip("/")
-        self.provider_key=os.getenv("ALEXA_AI_API_KEY",""); self.model=os.getenv("ALEXA_AI_MODEL","")
+        # Ollama runs beside this API in the self-hosted deployment. Its
+        # OpenAI-compatible endpoint needs no third-party API key.
+        self.engine=os.getenv("ALEXA_AI_ENGINE","").strip().lower()
+        if self.engine=="ollama":
+            self.provider_url=os.getenv("ALEXA_AI_BASE_URL","http://127.0.0.1:11434/v1").rstrip("/")
+            self.model=os.getenv("ALEXA_AI_MODEL",os.getenv("OLLAMA_MODEL","qwen3:4b"))
+        else:
+            self.provider_url=os.getenv("ALEXA_AI_BASE_URL","").rstrip("/")
+            self.model=os.getenv("ALEXA_AI_MODEL","")
+        self.provider_key=os.getenv("ALEXA_AI_API_KEY","")
         self.timeout=float(os.getenv("ALEXA_AI_TIMEOUT","45"))
     async def _provider_reply(self,message,history,parsed,plan,user_id,saved_name=None):
         if not (self.provider_url and self.model):return None
