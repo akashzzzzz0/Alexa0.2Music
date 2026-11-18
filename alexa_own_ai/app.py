@@ -58,9 +58,6 @@ MAX_MEMORY_VALUE_CHARS = 800
 INDIA_TZ = ZoneInfo("Asia/Kolkata")
 DB_LOCK = threading.RLock()
 
-# Set by bootstrap.py when ai_router owns the single inference attempt.
-CONVERSATION_ROUTER_OWNS_INFERENCE = False
-
 # Approximate transliteration for common Urdu and Hindi chat vocabulary.
 URDU = {
 "ا":"a","آ":"aa","ب":"b","پ":"p","ت":"t","ٹ":"t","ث":"s","ج":"j","چ":"ch","ح":"h","خ":"kh","د":"d","ڈ":"d","ذ":"z","ر":"r","ڑ":"r","ز":"z","ژ":"zh","س":"s","ش":"sh","ص":"s","ض":"z","ط":"t","ظ":"z","ع":"","غ":"gh","ف":"f","ق":"q","ک":"k","گ":"g","ل":"l","م":"m","ن":"n","ں":"n","و":"o","ؤ":"o","ہ":"h","ھ":"h","ۃ":"h","ء":"","ئ":"i","ی":"i","ي":"i","ك":"k","ى":"a","ے":"e","َ":"a","ِ":"i","ُ":"u","ّ":"","ً":"an","ٍ":"in","ٌ":"un","ٓ":""
@@ -507,22 +504,13 @@ def response_for(message, history, context=None):
     if history:
         last_user = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "user"), "")
         previous_assistant = next((normalize(x.get("content", "")) for x in reversed(history) if isinstance(x, dict) and x.get("role") == "assistant"), "")
-    # Give unresolved contextual messages one bounded model attempt before
-    # the generic local fallback. Deterministic intents above stay local, while
-    # short follow-ups and open chat can use the supplied conversation history.
-    # bootstrap.py routes through ai_router, which already performs the one
-    # bounded model attempt. Only direct app.py execution needs this fallback.
-    if not CONVERSATION_ROUTER_OWNS_INFERENCE:
-        model_reply = local_model_generate(raw, history, context=context)
-        if model_reply:
-            return model_reply
+    # All deterministic local intents have now been checked. Open-ended chat
+    # gets exactly one bounded model attempt with the caller's context attached.
+    model_reply = local_model_generate(raw, history, context=context)
+    if model_reply:
+        return model_reply
 
-    # Do not let a generic short-follow-up rule swallow real questions.
-    # The model must see the recent dialogue so it can resolve "why?", "meaning?",
-    # references, and incomplete Roman Urdu messages from their actual context.
-    # The model was already tried before deterministic fallback rules above.
-    # Only use a clarification fallback when no generative model is configured
-    # or the provider is temporarily unavailable.
+    # If inference is unavailable, use a concise language-matched fallback.
     if lang == "en":
         return "I'm listening. Tell me a little more about what you mean."
     if lang == "pa":
