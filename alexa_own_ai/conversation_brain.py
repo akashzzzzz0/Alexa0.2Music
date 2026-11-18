@@ -7,7 +7,7 @@ import re
 
 
 def respond(message, normalized, language, history, context=None):
-    """Handle clear time-of-day greetings; let the model reason about other chat."""
+    """Handle clear conversational intents; defer context-dependent turns to the model."""
     text = re.sub(r"[^\w\s]", " ", str(message or "").casefold(), flags=re.UNICODE)
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\b(alexa|please)\b", "", text).strip()
@@ -20,7 +20,12 @@ def respond(message, normalized, language, history, context=None):
             "",
         )
         if "what can i help" in previous_assistant or "how can i help" in previous_assistant:
-            return "Sure—what would you like help with?" if language == "en" else "Haan, bolo—kis cheez mein help chahiye?"
+            english_confirmation = text in {"yes", "yeah", "yep", "okay", "ok"}
+            return (
+                "Sure—what would you like help with?"
+                if english_confirmation or language == "en"
+                else "Haan, bolo—kis cheez mein help chahiye?"
+            )
 
     # Answer a clear, everyday relationship-advice request instead of returning
     # a generic clarification. Alexa must not claim it can arrange a partner.
