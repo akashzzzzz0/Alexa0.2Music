@@ -43,7 +43,9 @@ def understand(text: str,history: list[dict]|None=None)->dict:
     for name,phrases in INTENTS.items():
         if _contains_phrase(clean,phrases):intent=name;break
     address_only=bool(re.fullmatch(r"(?i)alexa(?:\s+(?:baby|dear|hello|hi))?[.! ]*",clean))
-    if address_only:intent="greeting"
+    if address_only:
+        intent="greeting"
+        if re.search(r"(?i)\\b(?:baby|dear)\\b",clean):lang="roman_urdu"
     tokens=re.findall(r"[\w\u0600-\u06FF']+",clean.casefold())
     is_question=clean.endswith(("?","؟")) or bool(set(tokens)&QUESTION_WORDS)
     if intent=="conversation" and is_question:intent="question"
