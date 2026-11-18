@@ -1,1 +1,2 @@
-# Python standard library only; no third-party packages required.
+# Install the Own AI service as a production package so Nixpacks includes all runtime modules.
+-e .
