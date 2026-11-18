@@ -416,6 +416,68 @@ def _is_compound_message(text):
     return not re.search(r"\d\s*[+*/%\-]\s*\d", str(text or ""))
 
 
+def _is_name_question(text):
+    return bool(re.fullmatch(
+        r"\s*(?:(?:mera|meri|my)\s+(?:naam|name)\s+(?:kya|what)(?:\s+(?:hai|ha|is))?|"
+        r"(?:what is|whats)\s+my\s+(?:name|naam))\s*[?.!]*",
+        str(text or "").casefold(),
+    ))
+
+def _known_user_name(history, context=None):
+    """Return a name only when it was explicitly supplied in recent turns or memory."""
+    if isinstance(context, dict):
+        memory = context.get("relevant_memory", {})
+        if isinstance(memory, dict):
+            for section in (memory.get("saved_memory"), memory.get("request_memory")):
+                if isinstance(section, dict):
+                    for key in ("name", "user_name", "preferred_name"):
+                        value = section.get(key)
+                        if isinstance(value, str) and value.strip():
+                            return value.strip()[:60]
+    declaration = re.compile(
+        r"\b(?:mera|meri|my)\s+(?:naam|name)\s+(?:hai|is|:)?\s*"
+        r"([a-z][a-z0-9_-]{1,30})\b",
+        re.IGNORECASE,
+    )
+    excluded = {"kya", "what", "hai", "is", "nahi", "nahin", "kya", "name", "naam"}
+    for item in reversed(history or []):
+        if not isinstance(item, dict) or item.get("role") != "user":
+            continue
+        match = declaration.search(str(item.get("content", "")))
+        if match and match.group(1).casefold() not in excluded:
+            return match.group(1)
+    return None
+
+
+def _is_substantive_question(text):
+    """Route real questions and multi-question turns to inference before canned intents."""
+    value = str(text or "").strip()
+    if not value:
+        return False
+    # Preserve deterministic handling for the most common tiny social exchanges.
+    if re.fullmatch(
+        r"(?:hi+|hello|hey+|salam|assalam(?: o alaikum)?|good morning|good afternoon|good evening|"
+        r"how are you|how r u|kaise ho|kaisay ho|kese ho|kya haal hai|time kya hai|aaj date kya hai)[!. ]*",
+        value,
+        re.IGNORECASE,
+    ):
+        return False
+    question_cues = re.compile(
+        r"\b(what|why|when|where|who|which|how|can|could|would|is|are|do|does|did|"
+        r"kya|kyun|kyu|kaise|kaisa|kaisi|kab|kahan|kidhar|kon|kaun|kitna|kitni|"
+        r"batao|btao|samjhao|mtlb|matlab)\b",
+        re.IGNORECASE,
+    )
+    if "?" in value or "؟" in value:
+        return True
+    # Longer natural-language turns usually carry context, emotion, or multiple clauses.
+    if len(re.findall(r"\w+", value)) >= 6:
+        return True
+    if len(re.findall(r"\b(?:1[.)]|2[.)]|3[.)]|4[.)]|5[.)])\s+", value)) >= 2:
+        return True
+    return bool(question_cues.search(value))
+
+
 def response_for(message, history, context=None):
     raw = str(message or "").strip()
     lang = detect_language(raw)
@@ -429,6 +491,13 @@ def response_for(message, history, context=None):
     if not raw:
         return r["hello"]
 
+    # Answer personal-name questions from explicit history/memory only. Never guess.
+    if _is_name_question(t):
+        known_name = _known_user_name(history, context=context)
+        if known_name:
+            return ("Your name is " if lang == "en" else "Tumhara naam ") + known_name + "."
+        return "Tumne abhi tak apna naam nahi bataya. Bata do, phir main sahi naam yaad rakh sakungi."
+
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
     if context is None:
@@ -437,6 +506,15 @@ def response_for(message, history, context=None):
         brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
+
+    # Give substantive questions first chance at contextual model inference.
+    # This prevents keyword-based canned replies (e.g. 'happy', 'leaderboard')
+    # from swallowing the actual question before the model can read its context.
+    if _is_substantive_question(t):
+        model_attempted = True
+        question_reply = local_model_generate(raw, history, context=context)
+        if question_reply:
+            return question_reply
 
     # Compound messages must reach the model intact before a one-intent
     # keyword fallback can answer only one clause and silently drop the rest.
