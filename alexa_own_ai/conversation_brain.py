@@ -12,6 +12,47 @@ def respond(message, normalized, language, history, context=None):
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\b(alexa|please)\b", "", text).strip()
 
+    # Repair the common "tell me more" loop by resolving the user's follow-up
+    # against Alexa's last prompt instead of returning the generic fallback.
+    previous_assistant = next(
+        (str(item.get("content", "")).casefold() for item in reversed(history or [])
+         if isinstance(item, dict) and item.get("role") == "assistant"),
+        "",
+    )
+    asks_what_to_say = bool(re.search(
+        r"\b(?:kya|kia)\s+(?:bata(?:u|oon|un)|bta(?:u|oon|un)|bol(?:u|oon|un))\b|"
+        r"\bwhat\s+should\s+i\s+(?:say|tell)\b",
+        text,
+    ))
+    previous_invited_more = any(phrase in previous_assistant for phrase in (
+        "aage batao", "thoda aur context", "tell me more", "go ahead",
+        "main sun rahi hoon", "i'm listening",
+    ))
+    if asks_what_to_say and previous_invited_more:
+        if language == "en":
+            return "Anything that's on your mind—what happened today, a question, or even a random thought. You don't need a special topic."
+        return "Jo bhi tumhare dimag mein chal raha hai woh bata do—koi baat, sawaal ya bas aaj ka scene. Koi khaas topic zaroori nahi."
+
+    asks_what_listening = bool(re.search(
+        r"\b(?:kya|kia)\s+sun\s+(?:rahi|raha|rhi)\s+(?:ho|hain)\b|"
+        r"\bwhat\s+are\s+you\s+listening\s+to\b",
+        text,
+    ))
+    if asks_what_listening:
+        if language == "en":
+            return "I'm following what you're saying here. I asked you to continue, but I should give you something more useful than repeating that."
+        return "Tumhari yahin wali baat sun rahi hoon. Maine aage bolne ko kaha tha, lekin baar-baar wahi line nahi dohraani chahiye. Jo poochna hai seedha pooch lo."
+
+    points_out_loop = bool(re.search(
+        r"\b(?:wahi|same|phir se|baar baar|bar bar|repeat|dobara)\b.{0,35}\b(?:jawab|reply|baat|line|keh|bol)\w*\b|"
+        r"\b(?:stop|band)\s+(?:repeating|saying)\b",
+        text,
+    ))
+    if points_out_loop:
+        if language == "en":
+            return "You're right—I repeated myself. I'll use what you just said and the earlier context instead of sending the same line again."
+        return "Haan, meri galti—main wahi jawab dohra rahi thi. Ab tumhari nayi baat aur pehle ka context dekh kar jawab dungi."
+
     # Resolve short confirmations against Alexa's immediately preceding question.
     if text in {"yes", "yeah", "yep", "haan", "han", "ji", "okay", "ok", "achha", "acha"} and history:
         previous_assistant = next(
