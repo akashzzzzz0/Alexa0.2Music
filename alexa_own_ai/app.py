@@ -336,9 +336,9 @@ def get_memory_items(scope):
 def _extract_explicit_user_name(message):
     """Extract a plainly stated first name; never infer a name from other text."""
     match = re.search(
-        r"\\b(?:mera|meri|my)\\s+(?:naam|name)\\s+"
+        r"\b(?:mera|meri|my)\s+(?:naam|name)\s+"
         r"([a-z][a-z0-9_-]{1,30})"
-        r"(?:\\s+(?:hai|ha|is))?(?:\\s+(?:yaad|remember)\\b.*)?[.! ]*$",
+        r"(?:\s+(?:hai|ha|is))?(?:\s+(?:yaad|remember)\b.*)?[.! ]*$",
         str(message or "").strip(),
         re.IGNORECASE,
     )
@@ -354,13 +354,13 @@ def _is_alexa_identity_question(text):
     """Recognize direct questions about Alexa's name or purpose in Roman Urdu/English."""
     value = normalize(text)
     asks_name = bool(re.search(
-        r"\\b(?:tumhara|tumhari|aapka|apka|your|what is your)\\s+(?:naam|name)\\b|"
-        r"\\b(?:tumhara|tumhari|aapka|apka)\\s+name\\s+kya\\b",
+        r"\b(?:tumhara|tumhari|aapka|apka|your|what is your)\s+(?:naam|name)\b|"
+        r"\b(?:tumhara|tumhari|aapka|apka)\s+name\s+kya\b",
         value,
     ))
     asks_role = bool(re.search(
-        r"\\b(?:tumhara|tumhari|aapka|apka|your)\\s+(?:kaam|work|job|purpose)\\b|"
-        r"\\b(?:tumhara|aapka)\\s+kaam\\s+kya\\b",
+        r"\b(?:tumhara|tumhari|aapka|apka|your)\s+(?:kaam|work|job|purpose)\b|"
+        r"\b(?:tumhara|aapka)\s+kaam\s+kya\b",
         value,
     ))
     return asks_name or asks_role
