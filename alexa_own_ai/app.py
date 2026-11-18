@@ -417,12 +417,11 @@ def _is_compound_message(text):
 
 
 def _is_name_question(text):
-    return bool(re.search(
-        r"\b(?:mera|meri|my)\s+(?:naam|name)\s+(?:kya|what|hai\s+kya|is\s+what)\b|"
-        r"\b(?:what is|whats)\s+my\s+(?:name|naam)\b",
+    return bool(re.fullmatch(
+        r"\\s*(?:(?:mera|meri|my)\\s+(?:naam|name)\\s+(?:kya|what)(?:\\s+(?:hai|ha|is))?|"
+        r"(?:what is|whats)\\s+my\\s+(?:name|naam))\\s*[?.!]*",
         str(text or "").casefold(),
     ))
-
 
 def _known_user_name(history, context=None):
     """Return a name only when it was explicitly supplied in recent turns or memory."""
