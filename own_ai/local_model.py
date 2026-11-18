@@ -59,6 +59,10 @@ class LocalGGUFModel:
                 )
             return self._model
 
+    def warmup(self) -> None:
+        """Download and load the model before the first Telegram message arrives."""
+        self._load()
+
     def reply(self, messages: list[dict]) -> str:
         with self._lock:
             result = self._load().create_chat_completion(
