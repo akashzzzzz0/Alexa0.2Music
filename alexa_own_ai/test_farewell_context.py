@@ -33,6 +33,14 @@ class FarewellContextTests(unittest.TestCase):
         reply = respond("What are we doing tomorrow?", "what are we doing tomorrow", "en", [])
         self.assertIsNone(reply)
 
+    def test_kal_wali_baat_question_is_not_mistaken_for_signoff(self):
+        message = (
+            "Alexa, mujhe apna system test karna hai. "
+            "Agar main kahun kal wali baat yaad hai toh bina context ke invent mat karna."
+        )
+        reply = respond(message, message.casefold(), "ur", [])
+        self.assertIsNone(reply)
+
 
 if __name__ == "__main__":
     unittest.main()
