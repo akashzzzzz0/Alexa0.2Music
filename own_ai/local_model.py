@@ -1,4 +1,4 @@
-"""Lazy local GGUF inference for a self-hosted Alexa model."""
+"""Lazy local GGUF inference for a self-hosted Alexa chat model."""
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ from typing import Any
 
 
 class LocalGGUFModel:
-    """Load one quantized model on first use and reuse it for later chats."""
+    """Load one quantized chat model on first use and reuse it."""
 
     def __init__(self) -> None:
         self.repo_id = os.getenv("ALEXA_LOCAL_MODEL_REPO", "Qwen/Qwen3-4B-GGUF")
@@ -16,8 +16,11 @@ class LocalGGUFModel:
         self.enabled = os.getenv("ALEXA_LOCAL_MODEL_ENABLED", "true").strip().lower() not in {
             "0", "false", "no", "off"
         }
-        self.n_ctx = max(2048, int(os.getenv("ALEXA_LOCAL_MODEL_CONTEXT", "8192")))
-        self.n_threads = max(1, int(os.getenv("ALEXA_LOCAL_MODEL_THREADS", "2")))
+        # Keep the KV cache small on low-memory CPU hosts. Can be raised by env.
+        self.n_ctx = max(2048, int(os.getenv("ALEXA_LOCAL_MODEL_CONTEXT", "2048")))
+        self.n_threads = max(1, int(os.getenv("ALEXA_LOCAL_MODEL_THREADS", "1")))
+        self.n_batch = max(32, int(os.getenv("ALEXA_LOCAL_MODEL_BATCH", "64")))
+        self.max_tokens = max(64, int(os.getenv("ALEXA_LOCAL_MODEL_MAX_TOKENS", "256")))
         self._model: Any = None
         self._lock = threading.RLock()
 
@@ -45,7 +48,7 @@ class LocalGGUFModel:
             options = {
                 "n_ctx": self.n_ctx,
                 "n_threads": self.n_threads,
-                "n_batch": 256,
+                "n_batch": self.n_batch,
                 "verbose": False,
             }
             if self.model_path:
@@ -60,7 +63,7 @@ class LocalGGUFModel:
             return self._model
 
     def warmup(self) -> None:
-        """Download and load the model before the first Telegram message arrives."""
+        """Download and load the model before the first chat request."""
         self._load()
 
     def reply(self, messages: list[dict]) -> str:
@@ -70,7 +73,7 @@ class LocalGGUFModel:
                 temperature=0.65,
                 top_p=0.85,
                 repeat_penalty=1.12,
-                max_tokens=384,
+                max_tokens=self.max_tokens,
             )
         choices = result.get("choices") or []
         if not choices:
