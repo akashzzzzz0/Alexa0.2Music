@@ -4,6 +4,8 @@ import unittest
 from model_runtime import _messages
 from conversation_brain import respond
 from deep_understanding import analyze
+from unittest.mock import patch
+import app
 
 
 class ConversationQualityPromptTests(unittest.TestCase):
@@ -11,6 +13,21 @@ class ConversationQualityPromptTests(unittest.TestCase):
 
 
 
+
+    def test_just_woke_up_smalltalk_gets_a_natural_reply_without_model(self):
+        cases = [
+            ("Abhi to utha hu", "Neend puri hui?"),
+            ("So I utha hu abhi", "Did you sleep well?"),
+            ("Abhi abhi uthi hu", "Neend puri hui?"),
+            ("I just woke up", "Did you sleep well?"),
+        ]
+        with patch("app.local_model_generate", return_value=None):
+            for message, expected in cases:
+                with self.subTest(message=message):
+                    reply = app.response_for(message, [])
+                    self.assertIn(expected, reply)
+                    self.assertNotIn("listening", reply.lower())
+                    self.assertNotIn("context", reply.lower())
 
     def test_prompt_requires_intent_and_reference_resolution(self):
         system = _messages("Woh kyun bola?", [

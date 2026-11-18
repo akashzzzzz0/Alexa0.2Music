@@ -379,6 +379,22 @@ def response_for(message, history, context=None):
     if not raw:
         return r["hello"]
 
+    # Recognize casual statements that the user has just woken up. This is
+    # ordinary small talk, not an unclear request; keep it natural even when
+    # the hosted model is unavailable.
+    if re.search(
+        r"\b(?:abhi|abi|abhe)\b.{0,24}\b(?:utha|uthi|uthe|uthaa)\b|"
+        r"\b(?:so\s+)?i\s+utha\s+hu(?:\s+abhi)?\b|"
+        r"\b(?:i\s+)?(?:just\s+)?woke\s+up\b|"
+        r"\b(?:i\s+)?just\s+got\s+up\b",
+        t,
+    ):
+        if lang == "en":
+            return "Oh, you just woke up? Good morning! Did you sleep well?"
+        if lang == "pa":
+            return "Achha ji, hunay uthey o? Good morning! Neend poori hoi?"
+        return "Achha, abhi abhi uthey ho? Good morning! Neend puri hui?"
+
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
     if context is None:
