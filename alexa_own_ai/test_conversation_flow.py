@@ -68,6 +68,15 @@ class InferenceFlowTests(unittest.TestCase):
         self.assertEqual(reply, "No problem.")
         model.assert_called_once()
 
+    def test_compound_message_reaches_model_before_single_intent_fallbacks(self):
+        message = "Tum kya kar rahi ho aur aaj ka plan kya hai?"
+        with patch.object(app, "conversation_respond", return_value=None), patch.object(
+            app, "local_model_generate", return_value="I'm chatting now, and my plan is to help you."
+        ) as model:
+            reply = app.response_for(message, [])
+        self.assertEqual(reply, "I'm chatting now, and my plan is to help you.")
+        model.assert_called_once_with(message, [], context=None)
+
     def test_deterministic_greeting_does_not_call_the_model(self):
         with patch.object(app, "conversation_respond", return_value=None), patch.object(
             app, "local_model_generate"
