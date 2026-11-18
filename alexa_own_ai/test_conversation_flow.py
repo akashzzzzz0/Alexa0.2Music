@@ -44,6 +44,24 @@ class EndToEndConversationTests(unittest.TestCase):
         self.assertIsNone(reply)
 
 
+class LanguageDetectionTests(unittest.TestCase):
+    def test_english_yes_and_no_are_detected_as_english(self):
+        self.assertEqual(app.detect_language("Yes"), "en")
+        self.assertEqual(app.detect_language("No"), "en")
+
+    def test_roman_urdu_dominates_one_english_word(self):
+        self.assertEqual(
+            app.detect_language("Mujhe batao what happened"),
+            "ur",
+        )
+
+    def test_english_sentence_is_not_misclassified_by_generic_tokens(self):
+        self.assertEqual(app.detect_language("I am here to help you"), "en")
+
+    def test_roman_urdu_sentence_remains_roman_urdu(self):
+        self.assertEqual(app.detect_language("Tum kya kar rahi ho?"), "ur")
+
+
 class InferenceFlowTests(unittest.TestCase):
     def test_open_chat_uses_exactly_one_context_aware_model_call(self):
         context = {"source": "test"}
