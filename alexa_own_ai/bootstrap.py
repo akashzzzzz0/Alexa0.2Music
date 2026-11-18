@@ -1,4 +1,4 @@
-"""Start Alexa Own AI with AI-first conversational routing."""
+"""Start Alexa Own AI with deterministic intent routing before model inference."""
 from http.server import ThreadingHTTPServer
 
 import app
