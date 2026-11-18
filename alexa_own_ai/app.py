@@ -418,8 +418,8 @@ def _is_compound_message(text):
 
 def _is_name_question(text):
     return bool(re.search(
-        r"\\b(?:mera|meri|my)\\s+(?:naam|name)\\s+(?:kya|what|hai\\s+kya|is\\s+what)\\b|"
-        r"\\b(?:what is|whats)\\s+my\\s+(?:name|naam)\\b",
+        r"\b(?:mera|meri|my)\s+(?:naam|name)\s+(?:kya|what|hai\s+kya|is\s+what)\b|"
+        r"\b(?:what is|whats)\s+my\s+(?:name|naam)\b",
         str(text or "").casefold(),
     ))
 
@@ -436,8 +436,8 @@ def _known_user_name(history, context=None):
                         if isinstance(value, str) and value.strip():
                             return value.strip()[:60]
     declaration = re.compile(
-        r"\\b(?:mera|meri|my)\\s+(?:naam|name)\\s+(?:hai|is|:)?\\s*"
-        r"([a-z][a-z0-9_-]{1,30})\\b",
+        r"\b(?:mera|meri|my)\s+(?:naam|name)\s+(?:hai|is|:)?\s*"
+        r"([a-z][a-z0-9_-]{1,30})\b",
         re.IGNORECASE,
     )
     excluded = {"kya", "what", "hai", "is", "nahi", "nahin", "kya", "name", "naam"}
@@ -464,14 +464,17 @@ def _is_substantive_question(text):
     ):
         return False
     question_cues = re.compile(
-        r"\\b(what|why|when|where|who|which|how|can|could|would|is|are|do|does|did|"
+        r"\b(what|why|when|where|who|which|how|can|could|would|is|are|do|does|did|"
         r"kya|kyun|kyu|kaise|kaisa|kaisi|kab|kahan|kidhar|kon|kaun|kitna|kitni|"
-        r"batao|btao|samjhao|mtlb|matlab)\\b",
+        r"batao|btao|samjhao|mtlb|matlab)\b",
         re.IGNORECASE,
     )
     if "?" in value or "؟" in value:
         return True
-    if len(re.findall(r"\\b(?:1[.)]|2[.)]|3[.)]|4[.)]|5[.)])\\s+", value)) >= 2:
+    # Longer natural-language turns usually carry context, emotion, or multiple clauses.
+    if len(re.findall(r"\\w+", value)) >= 6:
+        return True
+    if len(re.findall(r"\b(?:1[.)]|2[.)]|3[.)]|4[.)]|5[.)])\s+", value)) >= 2:
         return True
     return bool(question_cues.search(value))
 
