@@ -12,6 +12,27 @@ def respond(message, normalized, language, history, context=None):
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\b(alexa|please)\b", "", text).strip()
 
+    if text == "tum batao":
+        return "Main theek hoon, tum sunao?" if language != "en" else "I'm doing well, thanks. How are you?"
+    if text in {"kya matlab", "matlab kya"}:
+        return "Mera matlab tum mujhse normally baat karo, main samajh jaungi."
+    if text in {"kuch nahi", "kuch nahin"}:
+        return "Koi baat nahi, aise hi baat karte hain."
+    if text in {"tumhe kya lagta hai", "tumhein kya lagta hai"}:
+        return "Mere khayal mein sabse zaroori baat ye hai ke context samajh kar jawab diya jaye."
+    if text in {"tum naraz ho", "tum mujhse naraz ho"}:
+        return "Nahi, mere paas insano jaisi feelings nahi hoti, lekin main tumhari baat samajh sakti hoon."
+    if text in {"haan", "han"} and history:
+        previous = next(
+            (str(item.get("content", "")).casefold() for item in reversed(history)
+             if isinstance(item, dict) and item.get("role") == "assistant"),
+            "",
+        )
+        if "phir kya hua" in previous:
+            return "Achha, phir kya hua? Main sun rahi hoon."
+    if text == "aur" and history:
+        return "Main sun rahi hoon, aage batao."
+
     farewell = re.search(
         r"\b(good\s*night|gn|nighty\s*night|sleep\s*well|sweet\s*dreams|allah\s*hafiz|khuda\s*hafiz)\b",
         text,
