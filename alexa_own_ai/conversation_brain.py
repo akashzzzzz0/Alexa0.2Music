@@ -13,12 +13,12 @@ def respond(message, normalized, language, history, context=None):
     text = re.sub(r"\b(alexa|please)\b", "", text).strip()
 
     farewell = re.search(
-        r"\\b(good\\s*night|gn|nighty\\s*night|sleep\\s*well|sweet\\s*dreams|allah\\s*hafiz|khuda\\s*hafiz)\\b",
+        r"\b(good\s*night|gn|nighty\s*night|sleep\s*well|sweet\s*dreams|allah\s*hafiz|khuda\s*hafiz)\b",
         text,
     )
-    tomorrow = re.search(r"\\b(tomorrow|kal|next\\s*day)\\b", text)
+    tomorrow = re.search(r"\b(tomorrow|kal|next\s*day)\b", text)
     signoff = re.search(
-        r"\\b(bye|goodbye|see\\s+you|meet|milte|milenge|talk|chat|baat|phir\\s+mil|then|okay|ok)\\b",
+        r"\b(bye|goodbye|see\s+you|meet|milte|milenge|talk|chat|baat|phir\s+mil|then|okay|ok)\b",
         text,
     )
     if farewell or (tomorrow and signoff):
