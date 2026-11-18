@@ -716,7 +716,24 @@ class Handler(BaseHTTPRequestHandler):
     def authorized(self):
         return not API_TOKEN or hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + API_TOKEN)
 
+    def send_html(self, status, html):
+        data = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
+        route = self.path.split("?", 1)[0].rstrip("/")
+        if route == "/chat-ui":
+            try:
+                with open(os.path.join(APP_DIR, "chat_ui.html"), "r", encoding="utf-8") as page:
+                    return self.send_html(200, page.read())
+            except OSError:
+                return self.send_json(503, {"error": "chat_ui_unavailable"})
         if self.path.split("?", 1)[0].rstrip("*") == "/health":
             model_status = model_runtime_status()
             return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_recent_20+scoped_long_term"})
