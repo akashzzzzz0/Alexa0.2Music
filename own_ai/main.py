@@ -78,7 +78,7 @@ async def completions(payload: OpenAIChatRequest, authorization: str | None = He
     user_messages = [item.content for item in payload.messages if item.role == "user"]
     if not user_messages:
         raise HTTPException(status_code=422, detail="messages must contain a user message")
-    system_prompt = "\\n".join(
+    system_prompt = "\n".join(
         item.content for item in payload.messages if item.role == "system"
     )
     try:
