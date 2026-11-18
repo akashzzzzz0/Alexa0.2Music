@@ -542,7 +542,10 @@ def response_for(message, history, context=None):
             return ("Your name is " if lang == "en" else "Tumhara naam ") + known_name + "."
         return "Tumne abhi tak apna naam nahi bataya. Bata do, phir main sahi naam yaad rakh sakungi."
 
-    if _is_alexa_identity_question(t):
+    if (_is_alexa_identity_question(t)
+            and not _is_compound_message(t)
+            and len(re.findall(r"\\b\\d+[.)]\\s+", t)) < 2
+            and t.count("?") <= 1):
         if lang == "en":
             return "My name is Alexa. I'm your assistant, and my job is to understand your messages and help with questions, conversation, and tasks."
         return "Mera naam Alexa hai. Main tumhari assistant hoon. Mera kaam tumhari baat samajhna, sawalon ke jawab dena aur zaroori kaamon mein madad karna hai."
