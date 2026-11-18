@@ -12,6 +12,28 @@ def respond(message, normalized, language, history, context=None):
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\b(alexa|please)\b", "", text).strip()
 
+    # Resolve short confirmations against Alexa's immediately preceding question.
+    if text in {"yes", "yeah", "yep", "haan", "han", "ji", "okay", "ok", "achha", "acha"} and history:
+        previous_assistant = next(
+            (str(item.get("content", "")).casefold() for item in reversed(history)
+             if isinstance(item, dict) and item.get("role") == "assistant"),
+            "",
+        )
+        if "what can i help" in previous_assistant or "how can i help" in previous_assistant:
+            return "Sure—what would you like help with?" if language == "en" else "Haan, bolo—kis cheez mein help chahiye?"
+
+    # Answer a clear, everyday relationship-advice request instead of returning
+    # a generic clarification. Alexa must not claim it can arrange a partner.
+    relationship_request = re.search(
+        r"\\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b.{0,40}\\b(?:chahiye|chaiye|want|need|dila do|dilao|milwa do|milao)\\b|"
+        r"\\b(?:chahiye|chaiye|want|need)\\b.{0,30}\\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b",
+        text,
+    )
+    if relationship_request:
+        if language == "en":
+            return "I can't arrange someone for you, but I can help you think of a respectful way to get to know someone. 😊"
+        return "Haha, samajh gayi 😄 Main kisi ko arrange nahi kar sakti, lekin kisi se respectfully baat shuru karne ki achhi advice de sakti hoon."
+
     if text == "tum batao":
         return "Main theek hoon, tum sunao?" if language != "en" else "I'm doing well, thanks. How are you?"
     if text in {"kya matlab", "matlab kya"}:
