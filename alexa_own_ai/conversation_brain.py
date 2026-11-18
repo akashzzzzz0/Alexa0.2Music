@@ -19,7 +19,7 @@ def respond(message, normalized, language, history, context=None):
     if text in {"kuch nahi", "kuch nahin"}:
         return "Koi baat nahi, aise hi baat karte hain."
     if text in {"tumhe kya lagta hai", "tumhein kya lagta hai"}:
-        return "Mere khayal mein sabse zaroori baat ye hai ke context samajh kar jawab diya jaye."
+        return "Mere khayal mein sabse zaroori kya hai, ye situation aur context par depend karta hai."
     if text in {"tum naraz ho", "tum mujhse naraz ho"}:
         return "Nahi, mere paas insano jaisi feelings nahi hoti, lekin main tumhari baat samajh sakti hoon."
     if text in {"haan", "han"} and history:
