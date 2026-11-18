@@ -382,12 +382,12 @@ def save_turns(conversation, user_text, reply):
 
 def _is_compound_message(text):
     """Detect multi-clause chat that must not be swallowed by a single-intent fallback."""
-    parts = re.split(r"\b(?:aur|and|but|lekin|magar|also)\\b", str(text or ""), flags=re.IGNORECASE)
+    parts = re.split(r"\b(?:aur|and|but|lekin|magar|also)\b", str(text or ""), flags=re.IGNORECASE)
     meaningful_parts = [part for part in parts if len(part.split()) >= 3]
     if len(meaningful_parts) < 2:
         return False
     # Keep expressions for the exact local calculator on their existing path.
-    return not re.search(r"\d\\s*[+*/%\\-]\\s*\\d", str(text or ""))
+    return not re.search(r"\d\s*[+*/%\-]\s*\d", str(text or ""))
 
 
 def response_for(message, history, context=None):
