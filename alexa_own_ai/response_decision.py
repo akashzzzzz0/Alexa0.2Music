@@ -8,7 +8,12 @@ def decide(message, context=None):
     """Recommend an action; the calling Telegram integration performs it."""
     context = context if isinstance(context, dict) else {}
     is_group = context.get("is_group") is True
-    addressed = any(context.get(key) is True for key in ("addressed", "mentioned", "replied_to"))
+    addressed = any(
+        context.get(key) is True for key in (
+            "addressed", "mentioned", "replied_to", "bot_name_mentioned",
+            "username_mentioned", "reply_to_bot", "replied_to_bot",
+        )
+    )
     allow_reactions = context.get("allow_reactions") is True
     text = str(message or "").strip()
     if not is_group:
