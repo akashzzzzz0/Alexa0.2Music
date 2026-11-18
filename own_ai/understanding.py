@@ -17,15 +17,15 @@ NAME_STOP={"hai","hy","hain","ha","yaad","rkhna","rakhna","please","plz","rememb
 
 def _contains_phrase(text: str,phrases: list[str])->bool:
     low=text.casefold()
-    return any(re.search(r"(?<!\\w)"+re.escape(p.casefold())+r"(?!\\w)",low) for p in phrases)
+    return any(re.search(r"(?<!\w)"+re.escape(p.casefold())+r"(?!\w)",low) for p in phrases)
 
 def extract_name(text: str)->str|None:
     """Extract only explicit self-identification; never guess from a handle."""
     value=normalize_text(text)
     patterns=[
-      r"\\b(?:mera|meri)\\s+(?:naam|name)\\s+(?:hai\\s+)?([A-Za-z][A-Za-z'-]*(?:\\s+[A-Za-z][A-Za-z'-]*){0,2})",
-      r"\\bmy\\s+name\\s+is\\s+([A-Za-z][A-Za-z'-]*(?:\\s+[A-Za-z][A-Za-z'-]*){0,2})",
-      r"\\bcall\\s+me\\s+([A-Za-z][A-Za-z'-]*(?:\\s+[A-Za-z][A-Za-z'-]*){0,2})",
+      r"\b(?:mera|meri)\s+(?:naam|name)\s+(?:hai\s+)?([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2})",
+      r"\bmy\s+name\s+is\s+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2})",
+      r"\bcall\s+me\s+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2})",
     ]
     for pattern in patterns:
         match=re.search(pattern,value,flags=re.IGNORECASE)
@@ -42,9 +42,9 @@ def understand(text: str,history: list[dict]|None=None)->dict:
     clean=normalize_text(text); lang=detect_language(clean); intent="conversation"
     for name,phrases in INTENTS.items():
         if _contains_phrase(clean,phrases):intent=name;break
-    address_only=bool(re.fullmatch(r"(?i)alexa(?:\\s+(?:baby|dear|hello|hi))?[.! ]*",clean))
+    address_only=bool(re.fullmatch(r"(?i)alexa(?:\s+(?:baby|dear|hello|hi))?[.! ]*",clean))
     if address_only:intent="greeting"
-    tokens=re.findall(r"[\\w\\u0600-\\u06FF']+",clean.casefold())
+    tokens=re.findall(r"[\w\u0600-\u06FF']+",clean.casefold())
     is_question=clean.endswith(("?","؟")) or bool(set(tokens)&QUESTION_WORDS)
     if intent=="conversation" and is_question:intent="question"
     return {"text":clean,"language":lang,"intent":intent,"is_question":is_question,
