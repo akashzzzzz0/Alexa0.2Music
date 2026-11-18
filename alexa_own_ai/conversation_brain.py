@@ -25,8 +25,8 @@ def respond(message, normalized, language, history, context=None):
     # Answer a clear, everyday relationship-advice request instead of returning
     # a generic clarification. Alexa must not claim it can arrange a partner.
     relationship_request = re.search(
-        r"\\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b.{0,40}\\b(?:chahiye|chaiye|want|need|dila do|dilao|milwa do|milao)\\b|"
-        r"\\b(?:chahiye|chaiye|want|need)\\b.{0,30}\\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b",
+        r"\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b.{0,40}\\b(?:chahiye|chaiye|want|need|dila do|dilao|milwa do|milao)\\b|"
+        r"\b(?:chahiye|chaiye|want|need)\\b.{0,30}\\b(?:girlfriend|boyfriend|gf|bf|girl friend|boy friend)\\b",
         text,
     )
     if relationship_request:
