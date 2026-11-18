@@ -51,6 +51,20 @@ class InferenceFlowTests(unittest.TestCase):
         self.assertEqual(reply, "Context-aware answer")
         model.assert_called_once_with("A complete ordinary request", [], context=context)
 
+    def test_yes_after_a_specific_question_reaches_contextual_model(self):
+        history = [{"role": "assistant", "content": "Would you like me to explain the result?"}]
+        with patch.object(app, "local_model_generate", return_value="Sure, here's the explanation.") as model:
+            reply = app.response_for("Yes", history)
+        self.assertEqual(reply, "Sure, here's the explanation.")
+        model.assert_called_once()
+
+    def test_no_after_a_specific_question_reaches_contextual_model(self):
+        history = [{"role": "assistant", "content": "Would you like me to explain the result?"}]
+        with patch.object(app, "local_model_generate", return_value="No problem.") as model:
+            reply = app.response_for("No", history)
+        self.assertEqual(reply, "No problem.")
+        model.assert_called_once()
+
     def test_deterministic_greeting_does_not_call_the_model(self):
         with patch.object(app, "conversation_respond", return_value=None), patch.object(
             app, "local_model_generate"
