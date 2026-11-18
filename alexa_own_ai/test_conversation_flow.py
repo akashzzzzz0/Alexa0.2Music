@@ -23,22 +23,23 @@ class ConversationBrainTests(unittest.TestCase):
 
 
 class InferenceFlowTests(unittest.TestCase):
-    def test_bootstrapped_router_does_not_trigger_a_second_model_call(self):
-        with patch.object(app, "CONVERSATION_ROUTER_OWNS_INFERENCE", True), patch.object(
-            app, "conversation_respond", return_value=None
-        ), patch.object(app, "local_model_generate") as model:
-            reply = app.response_for("A complete ordinary request", [], context={"source": "test"})
-        model.assert_not_called()
-        self.assertTrue(reply)
-
-    def test_direct_app_mode_keeps_one_context_aware_model_fallback(self):
+    def test_open_chat_uses_exactly_one_context_aware_model_call(self):
         context = {"source": "test"}
-        with patch.object(app, "CONVERSATION_ROUTER_OWNS_INFERENCE", False), patch.object(
-            app, "conversation_respond", return_value=None
-        ), patch.object(app, "local_model_generate", return_value="Context-aware answer") as model:
+        with patch.object(app, "conversation_respond", return_value=None), patch.object(
+            app, "local_model_generate", return_value="Context-aware answer"
+        ) as model:
             reply = app.response_for("A complete ordinary request", [], context=context)
         self.assertEqual(reply, "Context-aware answer")
         model.assert_called_once_with("A complete ordinary request", [], context=context)
+
+    def test_deterministic_greeting_does_not_call_the_model(self):
+        with patch.object(app, "conversation_respond", return_value=None), patch.object(
+            app, "local_model_generate"
+        ) as model:
+            reply = app.response_for("hello", [])
+        self.assertEqual(reply, app.REPLIES["en"]["hello"])
+        model.assert_not_called()
+
 
 
 if __name__ == "__main__":
