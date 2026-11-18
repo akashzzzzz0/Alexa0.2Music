@@ -309,7 +309,16 @@ def get_memory_items(scope):
 
 def request_context(body, default_scope, message=""):
     """Combine approved memory, explicit feedback, request facts, and retrieved document excerpts."""
-    scope = _memory_scope(body.get("memory_scope") or default_scope)
+    # Personal long-term memory must not default to a shared group/chat ID.
+    # Prefer an explicit scope; otherwise isolate by the sending user when known.
+    explicit_scope = body.get("memory_scope")
+    user_identity = body.get("user_id") or body.get("from_user_id")
+    if explicit_scope:
+        scope = _memory_scope(explicit_scope)
+    elif user_identity is not None and str(user_identity).strip():
+        scope = _memory_scope("user:" + str(user_identity).strip())
+    else:
+        scope = _memory_scope(default_scope)
     memory_result = save_memory_items(
         scope,
         updates=body.get("memory_updates"),
