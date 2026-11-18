@@ -37,7 +37,9 @@ class FeedbackRequest(BaseModel):
 
 
 def authorize(authorization: str | None):
-    if TOKEN and authorization != "Bearer " + TOKEN:
+    if not TOKEN:
+        raise HTTPException(status_code=503, detail="service bearer token is not configured")
+    if authorization != "Bearer " + TOKEN:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
@@ -57,6 +59,7 @@ async def health():
         "model_configured": remote_ready or local_ready,
         "inference_backend": "remote" if remote_ready else ("local_gguf" if local_ready else "none"),
         "local_model_loaded": engine.local_model.loaded,
+        "auth_enabled": bool(TOKEN),
         "local_model_repo": engine.local_model.repo_id if local_ready else None,
         "memory": "sqlite",
         "learning": "explicit-feedback-sqlite",
