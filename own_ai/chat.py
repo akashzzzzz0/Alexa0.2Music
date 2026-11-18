@@ -43,19 +43,16 @@ class AlexaAI:
         plan=build_plan(message,parsed,history,prefs)
         try:
             if self.responder:
-                result=self.responder(message=message,history=history,understanding=parsed,plan=plan,preferences=prefs)
+                # Keep the original responder interface backward compatible.
+                result=self.responder(message=message,history=history,understanding=parsed,plan=plan)
                 if hasattr(result,"__await__"): result=await result
-                answer=str(result)
-                source="custom_responder"
+                answer=str(result); source="custom_responder"
             else:
                 answer=await self._provider_reply(message,history,parsed,plan,uid)
                 source="configured_model" if answer else "fallback"
         except (httpx.HTTPError,KeyError,ValueError) as exc:
-            answer=self._fallback(parsed)
-            source="fallback"
-            error=type(exc).__name__
-        else:
-            error=None
+            answer=self._fallback(parsed); source="fallback"; error=type(exc).__name__
+        else: error=None
         answer=compose_reply(answer,parsed["language"])
         self.memory.add(cid,"user",message); self.memory.add(cid,"assistant",answer)
         return {"reply":answer,"language":parsed["language"],"intent":parsed["intent"],
@@ -71,4 +68,5 @@ class AlexaAI:
          "thanks":{"ur":"خوشی ہوئی! مزید کچھ پوچھنا ہو تو بتائیے۔","roman_urdu":"Khushi hui! Aur kuch poochna ho to bataiye.","en":"You're welcome!"},
          "goodbye":{"ur":"اللہ حافظ! جب بھی مدد چاہیے ہو، بتائیے۔","roman_urdu":"Allah hafiz! Jab bhi help chahiye ho, bataiye.","en":"Goodbye! Take care."},
          "help":{"ur":"ضرور، بتائیے کس چیز میں مدد چاہیے؟","roman_urdu":"Zaroor, bataiye kis cheez mein help chahiye?","en":"Of course. What would you like help with?"}}
-        return answers.get(intent,{}).get(lang,{"ur":"آپ کی بات سمجھ آئی۔ بہتر جواب کے لیے تھوڑی مزید تفصیل بتائیں۔","roman_urdu":"Aapki baat samajh aayi. Behtar jawab ke liye thori detail dein.","en":"I understand. Could you share a little more detail so I can answer accurately."}.get(lang,"I understand. Could you share a little more detail?"))
+        default={"ur":"آپ کی بات سمجھ آئی۔ بہتر جواب کے لیے تھوڑی مزید تفصیل بتائیں۔","roman_urdu":"Aapki baat samajh aayi. Behtar jawab ke liye thori detail dein.","en":"I understand. Could you share a little more detail?"}
+        return answers.get(intent,default).get(lang,default["en"])
