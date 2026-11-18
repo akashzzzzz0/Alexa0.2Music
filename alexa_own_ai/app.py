@@ -737,7 +737,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.split("?", 1)[0].rstrip("*") == "/health":
             model_status = model_runtime_status()
             return self.send_json(200, {"ok": True, "service": "alexa-own-ai-micro", "engine": "multilingual-context+llm" if model_status["is_llm"] else "multilingual-local-context", "is_llm": model_status["is_llm"], "model_provider": model_status["provider"], "model": model_status["model"], "languages": ["English", "Roman Urdu", "Roman Hindi", "Roman Punjabi", "Urdu script input", "Devanagari input"], "memory_mode": "sqlite_recent_20+scoped_long_term"})
-        return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions"]})
+        return self.send_json(200, {"service": "alexa-own-ai-micro", "endpoints": ["/health", "/chat", "/v1/chat/completions", "/chat-ui"]})
 
     def do_POST(self):
         if not self.authorized():
