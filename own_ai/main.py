@@ -76,7 +76,7 @@ async def health():
         "local_model_loaded": engine.local_model.loaded,
         "local_model_state": (
             "ready" if engine.local_model.loaded else
-            ("loading" if not getattr(app.state, "model_warmup_task", None) is None
+            ("loading" if getattr(app.state, "model_warmup_task", None) is not None
              and not app.state.model_warmup_task.done() else "not_loaded")
         ),
         "auth_enabled": bool(TOKEN),
