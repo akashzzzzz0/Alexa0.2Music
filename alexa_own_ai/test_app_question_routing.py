@@ -15,6 +15,27 @@ class QuestionFirstRoutingTests(unittest.TestCase):
         reply = app.response_for("Mera naam kya hai?", history)
         self.assertIn("Akash", reply)
 
+    def test_explicit_roman_urdu_name_statement_is_extracted(self):
+        self.assertEqual(app._extract_explicit_user_name(
+            "Mera name Akash ha yaad Rakhna"
+        ), "Akash")
+
+    def test_name_statement_gets_acknowledged_without_model(self):
+        with patch.object(app, "local_model_generate") as generate:
+            reply = app.response_for("Mera name Akash ha yaad Rakhna", [])
+        self.assertIn("Akash", reply)
+        self.assertIn("yaad", reply.lower())
+        generate.assert_not_called()
+
+    def test_alexa_name_and_role_question_gets_direct_answer(self):
+        with patch.object(app, "local_model_generate") as generate:
+            reply = app.response_for(
+                "Tumhara name Kya ha or tumhara kaam Kya ha", []
+            )
+        self.assertIn("Alexa", reply)
+        self.assertIn("kaam", reply.lower())
+        generate.assert_not_called()
+
     def test_substantive_question_reaches_model_before_keyword_fallback(self):
         with patch.object(app, "local_model_generate", return_value="Leaderboard mein Gautam first hai.") as generate:
             reply = app.response_for("Leaderboard par number one kon hai?", [])
