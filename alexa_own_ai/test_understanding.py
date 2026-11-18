@@ -34,5 +34,28 @@ class UnderstandingRoutingTests(unittest.TestCase):
         self.assertIn("context", system)
 
 
+
+class UrduScriptUnderstandingTests(unittest.TestCase):
+    def test_urdu_script_correction_and_negation_are_detected(self):
+        cues = analyze("نہیں، میرا مطلب یہ نہیں تھا", [])
+        self.assertIn("message_act=correction_or_disagreement", cues)
+        self.assertIn("contains_negation=yes", cues)
+
+    def test_urdu_script_question_is_detected(self):
+        cues = analyze("آپ یہ کیوں کر رہے ہیں؟", [])
+        self.assertIn("contains_question=yes", cues)
+        self.assertIn("message_act=question", cues)
+
+    def test_urdu_script_request_is_detected(self):
+        cues = analyze("براہ کرم میری مدد کریں", [])
+        self.assertIn("contains_request=yes", cues)
+        self.assertIn("message_act=request", cues)
+
+    def test_urdu_script_emotion_is_detected_cautiously(self):
+        cues = analyze("میں آج اداس ہوں", [])
+        self.assertIn("message_act=emotional_share", cues)
+        self.assertIn("emotion_word_present", cues)
+
+
 if __name__ == "__main__":
     unittest.main()
