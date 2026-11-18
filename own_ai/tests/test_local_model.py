@@ -9,8 +9,8 @@ class LocalModelConfigTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             model = LocalGGUFModel()
             self.assertTrue(model.configured)
-            self.assertEqual(model.repo_id, "Qwen/Qwen3-1.7B-GGUF")
-            self.assertEqual(model.filename, "Qwen3-1.7B-Q8_0.gguf")
+            self.assertEqual(model.repo_id, "Qwen/Qwen3-4B-GGUF")
+            self.assertEqual(model.filename, "Qwen3-4B-Q4_K_M.gguf")
             self.assertFalse(model.loaded)
 
     def test_local_model_can_be_disabled(self):
