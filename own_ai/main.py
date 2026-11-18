@@ -1,11 +1,11 @@
-"""Alexa Own AI HTTP API with local GGUF inference and optional remote provider."""
+"""Alexa Own AI HTTP API with local GGUF inference and OpenAI-compatible chat requests."""
 from __future__ import annotations
 import os
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from .chat import AlexaAI
 
-app = FastAPI(title="Alexa Own AI", version="7.2.0")
+app = FastAPI(title="Alexa Own AI", version="7.2.1")
 engine = AlexaAI()
 TOKEN = os.getenv("ALEXA_OWN_AI_TOKEN", "")
 
@@ -14,6 +14,20 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     conversation_id: str = Field(default="default", max_length=128)
     user_id: str | None = Field(default=None, max_length=128)
+
+
+class OpenAIMessage(BaseModel):
+    role: str = Field(min_length=1, max_length=20)
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class OpenAIChatRequest(BaseModel):
+    messages: list[OpenAIMessage] = Field(min_length=1, max_length=64)
+    model: str = "auto"
+    conversation_id: str = Field(default="default", max_length=128)
+    user_id: str | None = Field(default=None, max_length=128)
+    temperature: float = Field(default=0.65, ge=0, le=2)
+    max_tokens: int = Field(default=384, ge=1, le=2048)
 
 
 class FeedbackRequest(BaseModel):
@@ -39,7 +53,7 @@ async def health():
     return {
         "ok": True,
         "service": "alexa-own-ai",
-        "version": "7.2.0",
+        "version": "7.2.1",
         "model_configured": remote_ready or local_ready,
         "inference_backend": "remote" if remote_ready else ("local_gguf" if local_ready else "none"),
         "local_model_loaded": engine.local_model.loaded,
@@ -59,9 +73,23 @@ async def chat(payload: ChatRequest, authorization: str | None = Header(default=
 
 
 @app.post("/v1/chat/completions")
-async def completions(payload: ChatRequest, authorization: str | None = Header(default=None)):
+async def completions(payload: OpenAIChatRequest, authorization: str | None = Header(default=None)):
     authorize(authorization)
-    result = await engine.chat(payload.message, payload.conversation_id, payload.user_id)
+    user_messages = [item.content for item in payload.messages if item.role == "user"]
+    if not user_messages:
+        raise HTTPException(status_code=422, detail="messages must contain a user message")
+    system_prompt = "\\n".join(
+        item.content for item in payload.messages if item.role == "system"
+    )
+    try:
+        result = await engine.chat(
+            user_messages[-1],
+            payload.conversation_id,
+            payload.user_id or payload.conversation_id,
+            system_prompt=system_prompt,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {
         "id": "alexa-chat",
         "object": "chat.completion",
@@ -70,7 +98,7 @@ async def completions(payload: ChatRequest, authorization: str | None = Header(d
             "message": {"role": "assistant", "content": result["reply"]},
             "finish_reason": "stop",
         }],
-        "model": engine.model or engine.local_model.repo_id,
+        "model": payload.model or engine.model or engine.local_model.repo_id,
         "metadata": {
             "language": result["language"],
             "intent": result["intent"],
