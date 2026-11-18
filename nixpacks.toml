@@ -1,10 +1,10 @@
 [phases.setup]
-nixPkgs = ["python311", "cmake", "gcc", "gnumake", "pkg-config"]
+nixPkgs = ["python311"]
 
 [phases.install]
 cmds = [
   "python -m pip install --upgrade pip",
-  "CMAKE_ARGS='-DGGML_NATIVE=OFF' CMAKE_BUILD_PARALLEL_LEVEL=2 python -m pip install --prefer-binary -r requirements.txt"
+  "python -m pip install --prefer-binary -r requirements.txt"
 ]
 
 [start]
