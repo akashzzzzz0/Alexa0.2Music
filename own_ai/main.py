@@ -17,6 +17,10 @@ class FeedbackRequest(BaseModel):
     positive:bool=True
 def authorize(authorization:str|None):
     if TOKEN and authorization != "Bearer "+TOKEN: raise HTTPException(status_code=401,detail="unauthorized")
+@app.get("/")
+async def root():
+    return {"ok":True,"service":"alexa-own-ai","health":"/health"}
+
 @app.get("/health")
 async def health():
     return {"ok":True,"service":"alexa-own-ai","version":"7.1.0",
