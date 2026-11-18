@@ -23,7 +23,7 @@ class AlexaAI:
         self.timeout = float(os.getenv("ALEXA_AI_TIMEOUT", "180"))
         self.local_model = LocalGGUFModel()
 
-    def _build_messages(self, message, history, parsed, plan, user_id, saved_name=None):
+    def _build_messages(self, message, history, parsed, plan, user_id, saved_name=None, external_system_prompt=""):
         prefs = self.learning.preferences(user_id)
         profile = (
             f"Verified saved user name: {saved_name}. Use it naturally when relevant; never invent or alter it."
@@ -44,6 +44,8 @@ class AlexaAI:
             + ".\nUse prior messages to understand follow-up questions. Answer the latest user message directly. "
               "Do not repeat greetings unnecessarily. /no_think"
         )
+        if external_system_prompt:
+            system += "\\nTelegram bot persona and conversation instructions:\\n" + external_system_prompt[:12000]
         messages = [{"role": "system", "content": system}]
         messages.extend(history[-20:])
         messages.append({"role": "user", "content": message})
@@ -96,7 +98,7 @@ class AlexaAI:
             }.get(language)
         return None
 
-    async def chat(self, message: str, conversation_id: str = "default", user_id: str | None = None) -> dict:
+    async def chat(self, message: str, conversation_id: str = "default", user_id: str | None = None, system_prompt: str = "") -> dict:
         message = (message or "").strip()
         if not message:
             raise ValueError("message cannot be empty")
@@ -118,7 +120,7 @@ class AlexaAI:
                 answer = f"جی {saved_name}، بتائیں؟" if saved_name else "جی، بتائیے؟"
             source, error = "context_fallback", None
         else:
-            messages = self._build_messages(message, history, parsed, plan, uid, saved_name)
+            messages = self._build_messages(message, history, parsed, plan, uid, saved_name, system_prompt)
             try:
                 if self.responder:
                     result = self.responder(
