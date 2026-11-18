@@ -36,6 +36,9 @@ class EndToEndConversationTests(unittest.TestCase):
         self.assertNotIn("I'm listening", second)
         model.assert_not_called()
 
+    def test_roman_urdu_request_is_not_misclassified_by_the_word_do(self):
+        self.assertEqual(app.detect_language("Girl friend chahiye dila do"), "ur")
+
     def test_relationship_request_without_english_keyword(self):
         reply = respond("Mujhe kisi se dosti shuru karni hai", "mujhe kisi se dosti shuru karni hai", "ur", [])
         self.assertIsNone(reply)
