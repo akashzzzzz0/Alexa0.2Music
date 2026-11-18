@@ -4,7 +4,7 @@ This is the existing Alexa Own AI service inside the Alexa0.2Music repository. I
 
 ## Runtime
 
-- Local inference by default using the official Apache-2.0 Qwen3 1.7B GGUF model.
+- Local inference by default using the official Apache-2.0 Qwen3 4B GGUF model.
 - Model weights are downloaded from Hugging Face on first inference and cached locally.
 - CPU-only llama.cpp inference; defaults to 2 threads and an 8K context.
 - Optional OpenAI-compatible remote provider remains supported and takes priority when configured.
@@ -23,8 +23,8 @@ Start command:
 Set these service variables (do not commit secrets):
 
 - `ALEXA_LOCAL_MODEL_ENABLED=true`
-- `ALEXA_LOCAL_MODEL_REPO=Qwen/Qwen3-1.7B-GGUF`
-- `ALEXA_LOCAL_MODEL_FILE=Qwen3-1.7B-Q8_0.gguf`
+- `ALEXA_LOCAL_MODEL_REPO=Qwen/Qwen3-4B-GGUF`
+- `ALEXA_LOCAL_MODEL_FILE=Qwen3-4B-Q4_K_M.gguf`
 - `ALEXA_LOCAL_MODEL_THREADS=2`
 - `ALEXA_LOCAL_MODEL_CONTEXT=8192`
 - `HF_HOME=/data/huggingface` (only if /data is a persistent writable volume)
@@ -43,7 +43,7 @@ Example request body:
 
 ## Important limits
 
-The local model is a compact 1.7B parameter model selected for CPU hosting, not a frontier-scale model. It can converse and follow context, but quality and speed are limited by the model and the host's CPU. No code can guarantee perfect Roman Urdu. The `/health` endpoint reports whether the backend is configured and whether the local model has loaded.
+The local model is a compact 4B parameter model selected for CPU hosting, not a frontier-scale model. It can converse and follow context, but quality and speed are limited by the model and the host's CPU. No code can guarantee perfect Roman Urdu. The `/health` endpoint reports whether the backend is configured and whether the local model has loaded.
 
 ## Local tests
 
