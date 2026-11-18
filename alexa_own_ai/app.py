@@ -544,7 +544,7 @@ def response_for(message, history, context=None):
 
     if (_is_alexa_identity_question(t)
             and not _is_compound_message(t)
-            and len(re.findall(r"\\b\\d+[.)]\\s+", t)) < 2
+            and len(re.findall(r"\b\d+[.)]\s+", t)) < 2
             and t.count("?") <= 1):
         if lang == "en":
             return "My name is Alexa. I'm your assistant, and my job is to understand your messages and help with questions, conversation, and tasks."
