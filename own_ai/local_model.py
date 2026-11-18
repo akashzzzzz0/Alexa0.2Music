@@ -10,8 +10,8 @@ class LocalGGUFModel:
     """Load one quantized model on first use and reuse it for later chats."""
 
     def __init__(self) -> None:
-        self.repo_id = os.getenv("ALEXA_LOCAL_MODEL_REPO", "Qwen/Qwen3-1.7B-GGUF")
-        self.filename = os.getenv("ALEXA_LOCAL_MODEL_FILE", "Qwen3-1.7B-Q8_0.gguf")
+        self.repo_id = os.getenv("ALEXA_LOCAL_MODEL_REPO", "Qwen/Qwen3-4B-GGUF")
+        self.filename = os.getenv("ALEXA_LOCAL_MODEL_FILE", "Qwen3-4B-Q4_K_M.gguf")
         self.model_path = os.getenv("ALEXA_LOCAL_MODEL_PATH", "").strip()
         self.enabled = os.getenv("ALEXA_LOCAL_MODEL_ENABLED", "true").strip().lower() not in {
             "0", "false", "no", "off"
