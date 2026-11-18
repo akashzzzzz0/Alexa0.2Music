@@ -491,6 +491,13 @@ def response_for(message, history, context=None):
     if not raw:
         return r["hello"]
 
+    # Answer personal-name questions from explicit history/memory only. Never guess.
+    if _is_name_question(t):
+        known_name = _known_user_name(history, context=context)
+        if known_name:
+            return ("Your name is " if lang == "en" else "Tumhara naam ") + known_name + "."
+        return "Tumne abhi tak apna naam nahi bataya. Bata do, phir main sahi naam yaad rakh sakungi."
+
     # Keep emoji-only input intact for contextual dialogue matching; normalize()
     # intentionally strips symbols for word-based intent rules.
     if context is None:
@@ -499,13 +506,6 @@ def response_for(message, history, context=None):
         brain_reply = conversation_respond(raw, t or raw, lang, history, context=context)
     if brain_reply:
         return brain_reply
-
-    # Answer personal-name questions from explicit history/memory only. Never guess.
-    if _is_name_question(t):
-        known_name = _known_user_name(history, context=context)
-        if known_name:
-            return ("Your name is " if lang == "en" else "Tumhara naam ") + known_name + "."
-        return "Tumne abhi tak apna naam nahi bataya. Bata do, phir main sahi naam yaad rakh sakungi."
 
     # Give substantive questions first chance at contextual model inference.
     # This prevents keyword-based canned replies (e.g. 'happy', 'leaderboard')
