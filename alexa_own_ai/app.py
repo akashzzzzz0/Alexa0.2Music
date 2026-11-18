@@ -116,9 +116,35 @@ def detect_language(raw):
     if script == "ur":
         return "ur"
     t = normalize(raw)
-    # Only two reply modes: English, or Roman Hindi/Urdu.
-    # Latin-script Hindi and Urdu overlap heavily, so treat them as one mode.
-    if re.search(r"\b(the|is|you|your|what|why|how|hello|please|thanks|can|will|would|should|this|that|i|we|they|where|when|who|doing|good|morning|evening|today|tomorrow|because|about|with|from|for|my|did|have|has|had|am|was|were|it|to|of|on|in|at|and|or|but|not|just|tell|say|something|there|here)\b", t):
+    # Choose the dominant language in mixed Latin-script messages instead of
+    # letting one English keyword override an otherwise Roman Urdu sentence.
+    tokens = set(re.findall(r"[a-z']+", t))
+    english_markers = {
+        "the", "is", "you", "your", "what", "why", "how", "hello", "hey",
+        "please", "thanks", "thank", "can", "will", "would", "should",
+        "this", "that", "i", "we", "they", "where", "when", "who", "doing",
+        "good", "morning", "evening", "today", "tomorrow", "because", "about",
+        "with", "from", "for", "my", "did", "have", "has", "had", "am", "was",
+        "were", "it", "to", "of", "on", "in", "at", "and", "or", "but", "not",
+        "just", "tell", "say", "something", "there", "here", "yes", "yeah",
+        "yep", "yup", "no", "nope", "ok", "okay",
+    }
+    roman_urdu_markers = {
+        "main", "mai", "mujhe", "mera", "meri", "mere", "tum", "tumhe",
+        "tumhein", "aap", "apko", "apka", "kya", "kyun", "kyu", "kaise",
+        "kaisa", "kaisi", "kab", "kahan", "kidhar", "kon", "kaun", "hai",
+        "hain", "ho", "haan", "han", "nahi", "nahin", "nhi", "acha",
+        "achha", "theek", "thik", "aur", "lekin", "magar", "batao", "btao",
+        "samjhao", "samjha", "kar", "karo", "kro", "chahiye", "chaiye",
+        "dila", "doon", "karo", "raha", "rahi", "rahe", "tha", "thi",
+        "wala", "wali", "wale", "ka", "ki", "ke", "ko", "se", "mein",
+        "me", "par", "abhi", "aaj", "kal", "kyunke", "kyunki",
+    }
+    english_score = len(tokens & english_markers)
+    roman_urdu_score = len(tokens & roman_urdu_markers)
+    if roman_urdu_score and roman_urdu_score >= english_score:
+        return "ur"
+    if english_score:
         return "en"
     return "ur"
 
