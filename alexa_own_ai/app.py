@@ -418,8 +418,8 @@ def _is_compound_message(text):
 
 def _is_name_question(text):
     return bool(re.fullmatch(
-        r"\\s*(?:(?:mera|meri|my)\\s+(?:naam|name)\\s+(?:kya|what)(?:\\s+(?:hai|ha|is))?|"
-        r"(?:what is|whats)\\s+my\\s+(?:name|naam))\\s*[?.!]*",
+        r"\s*(?:(?:mera|meri|my)\s+(?:naam|name)\s+(?:kya|what)(?:\s+(?:hai|ha|is))?|"
+        r"(?:what is|whats)\s+my\s+(?:name|naam))\s*[?.!]*",
         str(text or "").casefold(),
     ))
 
