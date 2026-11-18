@@ -391,6 +391,21 @@ def response_for(message, history, context=None):
     # Deterministic intent and short-follow-up rules run before paid/remote inference.
 
     # Natural Roman Hindi/Urdu small talk and conversational repair.
+    # Recognize casual statements that the user has just woken up. This is
+    # ordinary small talk, not an unclear request; keep it natural even when
+    # the hosted model is unavailable.
+    if re.search(
+        r"\\b(?:abhi|abi|abhe)\\b.{0,24}\\b(?:utha|uthi|uthe|uthaa)\\b|"
+        r"\\b(?:so\\s+)?i\\s+utha\\s+hu(?:\\s+abhi)?\\b|"
+        r"\\b(?:i\\s+)?(?:just\\s+)?woke\\s+up\\b|"
+        r"\\b(?:i\\s+)?just\\s+got\\s+up\\b",
+        t,
+    ):
+        if lang == "en":
+            return "Oh, you just woke up? Good morning! Did you sleep well?"
+        if lang == "pa":
+            return "Achha ji, hunay uthey o? Good morning! Neend poori hoi?"
+        return "Achha, abhi abhi uthey ho? Good morning! Neend puri hui?"
     if re.search(r"\b(sab theek|sab thik|sab thek)\b", t) and re.search(r"\b(kahan thi|kha th+i+|kaha thi|kidhar thi|tum thi|tum ho)\b", t):
         return "Haan, sab theek chal raha hai. Main yahin thi, tum sunao? Kya chal raha hai?"
     if re.search(r"\b(kis|kaun se|kon se)\b", t) and re.search(r"\b(alfaz|lafz|ilfaz|words|tarah)\b", t) and re.search(r"\b(samj|samajh|samjhe|samjha)\w*\b", t):
